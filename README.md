@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/public/native-window.webp" alt="native-window" width="200" />
+  <img src="https://fcannizzaro.com/_astro/native-window.IZZgO9dh.webp" alt="native-window" />
 </p>
 
 # @nativewindow/webview
