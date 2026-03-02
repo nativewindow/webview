@@ -1,0 +1,255 @@
+name: Publish
+on:
+  workflow_dispatch:
+concurrency:
+  group: publish
+  cancel-in-progress: true
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    name: Check
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.check.outputs.should_publish }}
+      publish_native_window: ${{ steps.check.outputs.publish_native_window }}
+      publish_ipc: ${{ steps.check.outputs.publish_ipc }}
+      publish_ipc_react: ${{ steps.check.outputs.publish_ipc_react }}
+      publish_tsdb: ${{ steps.check.outputs.publish_tsdb }}
+      new_native_window: ${{ steps.check.outputs.new_native_window }}
+      new_ipc: ${{ steps.check.outputs.new_ipc }}
+      new_ipc_react: ${{ steps.check.outputs.new_ipc_react }}
+      new_tsdb: ${{ steps.check.outputs.new_tsdb }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - id: check
+        name: Check which packages need publishing
+        run: |
+          check_version() {
+            local pkg_dir=$1
+            local npm_name=$2
+            local output_name=$3
+            local local_ver=$(node -p "require('./${pkg_dir}/package.json').version")
+            local npm_ver
+            npm_ver=$(npm view "${npm_name}" version 2>/dev/null) || npm_ver="0.0.0"
+            echo "${output_name}: local=${local_ver} npm=${npm_ver}"
+            if [ "$local_ver" != "$npm_ver" ]; then
+              echo "${output_name}=true" >> $GITHUB_OUTPUT
+            else
+              echo "${output_name}=false" >> $GITHUB_OUTPUT
+            fi
+            if [ "$npm_ver" = "0.0.0" ]; then
+              echo "new_${output_name#publish_}=true" >> $GITHUB_OUTPUT
+            else
+              echo "new_${output_name#publish_}=false" >> $GITHUB_OUTPUT
+            fi
+          }
+
+          check_version "packages/webview" "@nativewindow/webview" "publish_native_window"
+          check_version "packages/ipc" "@nativewindow/ipc" "publish_ipc"
+          check_version "packages/ipc-react" "@nativewindow/react" "publish_ipc_react"
+          check_version "packages/tsdb" "@nativewindow/tsdb" "publish_tsdb"
+
+          # should_publish is true if any package needs publishing
+          if grep -q "=true" <<< "$(cat $GITHUB_OUTPUT)"; then
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          fi
+  build:
+    name: Build - ${{ matrix.target }}
+    needs: release
+    if: needs.release.outputs.publish_native_window == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+          - target: aarch64-pc-windows-msvc
+            runner: windows-latest
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux dependencies
+        if: contains(matrix.target, 'linux')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            packages/webview/target/
+          key: cargo-${{ matrix.target }}-${{ hashFiles('packages/webview/Cargo.lock') }}
+          restore-keys: cargo-${{ matrix.target }}-
+      - run: bun napi build --release --platform --target ${{ matrix.target }}
+        working-directory: packages/webview
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+          path: packages/webview/native-window.*.node
+          if-no-files-found: error
+  publish:
+    name: Publish to npm
+    needs: [release, build]
+    if: >-
+      always() &&
+      needs.release.outputs.should_publish == 'true' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # ---- @nativewindow/webview (conditional) ----
+      - name: Sync platform package versions
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: bunx napi version
+        working-directory: packages/webview
+      - name: Sync optionalDependencies versions
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+              pkg.optionalDependencies[dep] = pkg.version;
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+        working-directory: packages/webview
+      - uses: actions/download-artifact@v4
+        if: needs.release.outputs.publish_native_window == 'true'
+        with:
+          path: packages/webview/artifacts
+      - name: Move artifacts to platform packages
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: bunx napi artifacts
+        working-directory: packages/webview
+      - name: Copy README to webview
+        run: cp README.md packages/webview/
+      - name: List platform packages
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: ls -R packages/webview/npm/
+      - name: Build webview (ts)
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: bun run build:ts
+        working-directory: packages/webview
+      - name: Publish platform packages
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+          if [ "$NEW" = "true" ]; then
+            npm config set "//registry.npmjs.org/:_authToken" "${NPM_TOKEN}"
+          fi
+          for dir in packages/webview/npm/*/; do
+            npm publish "$dir" --access public --provenance
+          done
+        env:
+          NEW: ${{ needs.release.outputs.new_native_window }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish @nativewindow/webview
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+          if [ "$NEW" = "true" ]; then
+            npm config set "//registry.npmjs.org/:_authToken" "${NPM_TOKEN}"
+          fi
+          npm publish --access public --provenance
+        working-directory: packages/webview
+        env:
+          NEW: ${{ needs.release.outputs.new_native_window }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # ---- @nativewindow/ipc (conditional) ----
+      - name: Build @nativewindow/ipc
+        if: needs.release.outputs.publish_ipc == 'true'
+        run: bun run build
+        working-directory: packages/ipc
+      - name: Publish @nativewindow/ipc
+        if: needs.release.outputs.publish_ipc == 'true'
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+          if [ "$NEW" = "true" ]; then
+            npm config set "//registry.npmjs.org/:_authToken" "${NPM_TOKEN}"
+          fi
+          npm publish --access public --provenance
+        working-directory: packages/ipc
+        env:
+          NEW: ${{ needs.release.outputs.new_ipc }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # ---- @nativewindow/react (conditional) ----
+      - name: Build @nativewindow/react
+        if: needs.release.outputs.publish_ipc_react == 'true'
+        run: bun run build
+        working-directory: packages/react
+      - name: Publish @nativewindow/react
+        if: needs.release.outputs.publish_ipc_react == 'true'
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+          if [ "$NEW" = "true" ]; then
+            npm config set "//registry.npmjs.org/:_authToken" "${NPM_TOKEN}"
+          fi
+          npm publish --access public --provenance
+        working-directory: packages/react
+        env:
+          NEW: ${{ needs.release.outputs.new_ipc_react }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # ---- @nativewindow/tsdb (conditional) ----
+      - name: Build @nativewindow/tsdb
+        if: needs.release.outputs.publish_tsdb == 'true'
+        run: bun run build
+        working-directory: packages/tsdb
+      - name: Publish @nativewindow/tsdb
+        if: needs.release.outputs.publish_tsdb == 'true'
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+          if [ "$NEW" = "true" ]; then
+            npm config set "//registry.npmjs.org/:_authToken" "${NPM_TOKEN}"
+          fi
+          npm publish --access public --provenance
+        working-directory: packages/tsdb
+        env:
+          NEW: ${{ needs.release.outputs.new_tsdb }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # ---- Common ----
+      - name: Copy LICENSE to packages
+        run: |
+          for dir in packages/*/; do
+            cp LICENSE "$dir"
+          done
+      - name: Create GitHub Release
+        if: needs.release.outputs.publish_native_window == 'true'
+        run: |
+          version=$(node -p "require('./packages/webview/package.json').version")
+          gh release create "v${version}" --title "v${version}" --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,304 @@
+---
+title: React Hooks
+description: React hooks for typed IPC in webview apps
+---
+
+## Overview
+
+The `@nativewindow/react` package provides React hooks for the [Typed IPC](/ipc) channel. It wraps `createChannelClient` from `@nativewindow/ipc/client` with idiomatic React lifecycle management — context providers, automatic subscribe/unsubscribe, and stable function references.
+
+Use this package when your webview content is a React app bundled with its own build step (Vite, webpack, etc.). It gives you:
+
+- **`createChannelHooks`** — factory that returns pre-typed hooks (recommended)
+- **`ChannelProvider`** — creates the channel client once and provides it via React context
+- **`useChannel`** — access the typed channel from any component
+- **`useChannelEvent`** — subscribe to events with automatic cleanup on unmount
+- **`useSend`** — get a stable `send` function that won't cause unnecessary re-renders
+
+The package is pure TypeScript with zero runtime dependencies. React and `@nativewindow/ipc` are peer dependencies.
+
+## Installation
+
+```bash
+bun add @nativewindow/react
+# or
+deno add npm:@nativewindow/react
+```
+
+Peer dependencies:
+
+| Package             | Version                |
+| ------------------- | ---------------------- |
+| `react`             | `^18.0.0 \|\| ^19.0.0` |
+| `@nativewindow/ipc` | `workspace:*`          |
+| `typescript`        | `^5`                   |
+
+A schema library is also required for runtime validation. See [Supported Schema Libraries](/ipc#supported-schema-libraries).
+
+## Setup with `createChannelHooks` (Recommended)
+
+The `createChannelHooks` factory returns a set of pre-typed hooks. Event names and payload types are inferred from your schemas — no need to pass generic type parameters at every call site:
+
+```tsx
+// channel.ts — define once, import everywhere
+import { z } from "zod";
+import { createChannelHooks } from "@nativewindow/react";
+
+export const { ChannelProvider, useChannel, useChannelEvent, useSend } = createChannelHooks({
+  /** Host -> Webview: update the displayed title */
+  "update-title": z.string(),
+  /** Webview -> Host: user clicked a button */
+  counter: z.number(),
+});
+```
+
+Wrap your app with the provider at the root:
+
+```tsx
+// main.tsx
+import { ChannelProvider } from "./channel";
+
+function Root() {
+  return (
+    <ChannelProvider>
+      <App />
+    </ChannelProvider>
+  );
+}
+```
+
+All hooks returned by the factory are pre-typed — no generics needed:
+
+```tsx
+import { useChannelEvent, useSend } from "./channel";
+
+function Counter() {
+  const send = useSend();
+
+  useChannelEvent("update-title", (title) => {
+    // title is inferred as string
+    document.title = title;
+  });
+
+  return <button onClick={() => send("counter", 1)}>Increment</button>;
+}
+```
+
+You can also pass an `onValidationError` callback as the second argument:
+
+```tsx
+const hooks = createChannelHooks(schemas, {
+  onValidationError: (type, payload) => {
+    console.warn(`Invalid "${type}" payload:`, payload);
+  },
+});
+```
+
+Each call to `createChannelHooks` creates its own React context, so multiple independent channels are supported if needed.
+
+## Hooks
+
+### `useChannel`
+
+Access the typed channel from any component inside the provider. Throws if called outside the `ChannelProvider`.
+
+```tsx
+import { useChannel } from "./channel";
+
+function StatusBar() {
+  const channel = useChannel();
+
+  // Full access to send, on, off — all typed
+  channel.send("counter", 1);
+
+  return <div>...</div>;
+}
+```
+
+### `useChannelEvent`
+
+Subscribe to a specific event type with automatic cleanup. The subscription is created on mount and removed on unmount:
+
+```tsx
+import { useState } from "react";
+import { useChannelEvent } from "./channel";
+
+function TitleDisplay() {
+  const [title, setTitle] = useState("Untitled");
+
+  useChannelEvent("update-title", (newTitle) => {
+    // newTitle is inferred as string
+    setTitle(newTitle);
+  });
+
+  return <h1>{title}</h1>;
+}
+```
+
+**Handler stability:** The handler is stored in a ref internally, so passing a new function on every render does **not** cause a re-subscription. The underlying `on()`/`off()` calls only happen when the event `type` string changes or the component unmounts.
+
+### `useSend`
+
+Returns a stable `send` function. The function identity does not change between renders, making it safe to pass as a prop without causing unnecessary re-renders in child components:
+
+```tsx
+import { useSend } from "./channel";
+
+function Counter() {
+  const send = useSend();
+
+  return <button onClick={() => send("counter", 1)}>Increment</button>;
+}
+```
+
+## Full Example
+
+A complete React webview app using `createChannelHooks`:
+
+> **Tip:** Schemas are plain objects with no platform-specific code. Define them once in a shared file and import on both the host (Bun/Deno/Node.js) and webview (native-window-ipc-react
+
+```ts
+// schemas.ts — shared between host and webview
+import { z } from "zod";
+
+export const schemas = {
+  "update-title": z.string(),
+  "show-notification": z.object({
+    message: z.string(),
+    level: z.enum(["info", "warn", "error"]),
+  }),
+  counter: z.number(),
+  "user-action": z.string(),
+};
+```
+
+```ts
+// channel.ts
+import { createChannelHooks } from "@nativewindow/ipc";
+import { schemas } from "./schemas";
+
+export const { ChannelProvider, useChannelEvent, useSend } = createChannelHooks(schemas);
+```
+
+```tsx
+// App.tsx
+import { useState } from "react";
+import { ChannelProvider, useChannelEvent, useSend } from "./channel";
+
+function App() {
+  const [title, setTitle] = useState("My App");
+  const [notifications, setNotifications] = useState<string[]>([]);
+  const send = useSend();
+
+  useChannelEvent("update-title", (newTitle) => {
+    setTitle(newTitle);
+  });
+
+  useChannelEvent("show-notification", (notification) => {
+    setNotifications((prev) => [...prev, notification.message]);
+  });
+
+  return (
+    <div>
+      <h1>{title}</h1>
+      <button onClick={() => send("counter", 1)}>+1</button>
+      <button onClick={() => send("user-action", "reset")}>Reset</button>
+      <ul>
+        {notifications.map((msg, i) => (
+          <li key={i}>{msg}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default function Root() {
+  return (
+    <ChannelProvider>
+      <App />
+    </ChannelProvider>
+  );
+}
+```
+
+On the host side, the corresponding setup would be:
+
+```ts
+// host.ts (Bun / Deno / Node.js)
+import { createWindow } from "@nativewindow/ipc";
+import { schemas } from "./schemas";
+
+const ch = createWindow({ title: "My App", width: 800, height: 600 }, { schemas });
+
+ch.window.loadUrl("http://localhost:5173"); // Vite dev server
+
+ch.on("counter", (n) => console.log("Counter:", n));
+ch.on("user-action", (action) => console.log("Action:", action));
+
+ch.send("update-title", "Hello from host!");
+ch.send("show-notification", {
+  message: "Connected to host",
+  level: "info",
+});
+```
+
+## Standalone Hooks
+
+If you prefer not to use the factory pattern, the package also exports standalone hooks that accept generic type parameters. This approach requires you to define an event map type and pass it to each hook:
+
+```tsx
+import { z } from "zod";
+import { ChannelProvider, useChannel, useChannelEvent, useSend } from "@nativewindow/react";
+
+const schemas = {
+  counter: z.number(),
+  title: z.string(),
+};
+
+type Events = { counter: number; title: string };
+
+function App() {
+  const send = useSend<Events>();
+  useChannelEvent<Events, "title">("title", (t) => {
+    document.title = t;
+  });
+  return <button onClick={() => send("counter", 1)}>+1</button>;
+}
+
+function Root() {
+  return (
+    <ChannelProvider schemas={schemas}>
+      <App />
+    </ChannelProvider>
+  );
+}
+```
+
+The standalone `ChannelProvider` accepts `schemas` and `onValidationError` as props:
+
+| Prop                | Type                      | Default        | Description                                       |
+| ------------------- | ------------------------- | -------------- | ------------------------------------------------- |
+| `schemas`           | `SchemaMap`               | **(required)** | Schemas for runtime validation and type inference |
+| `onValidationError` | `(type, payload) => void` | —              | Called when an incoming payload fails validation  |
+| `children`          | `ReactNode`               | **(required)** | React children                                    |
+
+## API Reference
+
+### Exports
+
+| Export                                  | Kind      | Description                                                                   |
+| --------------------------------------- | --------- | ----------------------------------------------------------------------------- |
+| `createChannelHooks(schemas, options?)` | Factory   | Returns pre-typed `{ ChannelProvider, useChannel, useChannelEvent, useSend }` |
+| `ChannelProvider`                       | Component | Standalone context provider (requires `schemas` prop)                         |
+| `ChannelProviderProps<S>`               | Type      | Props interface for the standalone provider                                   |
+| `useChannel<T>()`                       | Hook      | Standalone: access the typed channel from context                             |
+| `useChannelEvent<T, K>(type, handler)`  | Hook      | Standalone: subscribe to events with automatic cleanup                        |
+| `useSend<T>()`                          | Hook      | Standalone: stable `send` function                                            |
+| `TypedChannelHooks<T>`                  | Type      | Return type of `createChannelHooks`                                           |
+| `ChannelHooksOptions`                   | Type      | Options for `createChannelHooks`                                              |
+
+### Type Re-exports
+
+The package re-exports all core types from `@nativewindow/ipc` so you don't need to import from two packages:
+
+`EventMap`, `SchemaLike`, `SchemaMap`, `InferSchemaMap`, `InferOutput`, `SendArgs`, `ValidationErrorHandler`, `TypedChannel`, `ChannelClientOptions`

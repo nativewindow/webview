@@ -1,0 +1,13 @@
+{
+  "format_on_save": "on",
+  "lsp": {
+    "oxfmt": {
+      "initialization_options": {
+        "settings": {
+          "fmt.configPath": null
+        }
+      }
+    }
+  },
+  "formatter": "language_server"
+}
