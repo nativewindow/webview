@@ -121,6 +121,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          registry-url: https://registry.npmjs.org
       # ---- @nativewindow/webview (conditional) ----
       - name: Sync platform package versions
         if: needs.release.outputs.publish_native_window == 'true'
@@ -161,21 +162,21 @@ jobs:
           for dir in packages/*/; do
             cp LICENSE "$dir"
           done
-      - name: Publish platform packages
-        if: needs.release.outputs.publish_native_window == 'true'
-        run: |
-          for dir in packages/webview/npm/*/; do
-            npm publish "$dir" --access public --provenance
-          done
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # - name: Publish platform packages
+      #   if: needs.release.outputs.publish_native_window == 'true'
+      #   run: |
+      #     for dir in packages/webview/npm/*/; do
+      #       npm publish "$dir" --access public --provenance
+      #     done
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # ---- @nativewindow/webview (conditional) ----
       - name: Publish @nativewindow/webview
         if: needs.release.outputs.publish_native_window == 'true'
         run: npm publish --access public --provenance
         working-directory: packages/webview
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # ---- @nativewindow/ipc (conditional) ----
       - name: Build @nativewindow/ipc
         if: needs.release.outputs.publish_ipc == 'true'
@@ -186,7 +187,7 @@ jobs:
         run: npm publish --access public --provenance
         working-directory: packages/ipc
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # ---- @nativewindow/react (conditional) ----
       - name: Build @nativewindow/react
         if: needs.release.outputs.publish_ipc_react == 'true'
@@ -197,7 +198,7 @@ jobs:
         run: npm publish --access public --provenance
         working-directory: packages/react
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # ---- @nativewindow/tsdb (conditional) ----
       - name: Build @nativewindow/tsdb
         if: needs.release.outputs.publish_tsdb == 'true'
@@ -208,7 +209,7 @@ jobs:
         run: npm publish --access public --provenance
         working-directory: packages/tsdb
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub Release
         if: needs.release.outputs.publish_native_window == 'true'
         run: |
