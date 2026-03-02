@@ -1,0 +1,22 @@
+{
+  "name": "@nativewindow/webview-win32-x64-msvc",
+  "version": "0.0.0",
+  "description": "Native window addon for Windows x64",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcannizzaro/native-window"
+  },
+  "files": [
+    "native-window.win32-x64-msvc.node"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "native-window.win32-x64-msvc.node",
+  "engines": {
+    "node": ">= 10"
+  }
+}

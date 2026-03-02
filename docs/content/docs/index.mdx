@@ -1,0 +1,55 @@
+---
+title: Introduction
+description: Native OS webview windows for Bun, Deno and Node.js
+---
+
+## What is native-window?
+
+**native-window** lets you create real desktop windows with embedded web content from Bun, Deno or Node.js. It uses [wry](https://github.com/tauri-apps/wry) and [tao](https://github.com/tauri-apps/tao) under the hood — providing WebKit on macOS and Linux, and WebView2 on Windows — so there is no bundled Chromium or Electron runtime. The result is a lightweight, fast way to build desktop UIs with web technologies.
+
+The project is split into four packages:
+
+| Package                 | Description                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| `@nativewindow/webview` | Rust napi-rs addon (powered by wry + tao) that provides native window and webview APIs |
+| `@nativewindow/ipc`     | Pure TypeScript typed IPC channel layer (optional, zero runtime dependencies)          |
+| `@nativewindow/react`   | React hooks for typed IPC in webview apps (optional, wraps the IPC client)             |
+| `@nativewindow/tsdb`    | TanStack DB collection adapter for host-to-webview data sync (optional)                |
+
+You can use the core package alone for raw window management and message passing, add the IPC package for compile-time checked, type-safe communication between your host process and the webview, use the React hooks package if your webview app is built with React, or add the TanStack DB adapter to sync host-side data to reactive collections in the webview.
+
+## Platform Support
+
+| Platform           | Webview Engine      | Status                                                                            |
+| ------------------ | ------------------- | --------------------------------------------------------------------------------- |
+| macOS (ARM, x64)   | WebKit (via wry)    | Always available (system framework)                                               |
+| Windows (x64, ARM) | WebView2 (via wry)  | Pre-installed on Windows 11; auto-installable on Windows 10 via `ensureRuntime()` |
+| Linux (x64, ARM)   | WebKitGTK (via wry) | Requires WebKitGTK development headers                                            |
+
+## How It Works
+
+The native addon uses [tao](https://github.com/tauri-apps/tao) for cross-platform windowing and [wry](https://github.com/tauri-apps/wry) for webview management, with a **command queue** architecture on top. When you call methods like `setTitle()` or `loadHtml()`, commands are enqueued and then drained on the main thread by `pumpEvents()`, which also pumps the OS event loop to keep windows responsive.
+
+The `NativeWindow` class manages this lifecycle automatically — it initializes the native subsystem on first window creation, starts pumping events at ~60fps, and stops when all windows are closed. You don't need to call `init()` or `pumpEvents()` manually.
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Getting Started"
+    href="/getting-started"
+    description="Install the packages and create your first window"
+  />
+  <Card
+    title="Typed IPC"
+    href="/ipc"
+    description="Type-safe bidirectional messaging between host and webview"
+  />
+  <Card title="React Hooks" href="/react" description="React hooks for typed IPC in webview apps" />
+  <Card
+    title="TanStack DB Adapter"
+    href="/tsdb"
+    description="Sync host-side data to TanStack DB collections in the webview"
+  />
+  <Card title="Security" href="/security" description="Security model and best practices" />
+</Cards>

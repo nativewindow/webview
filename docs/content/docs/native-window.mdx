@@ -1,0 +1,274 @@
+---
+title: NativeWindow
+description: API reference for the native window addon
+---
+
+## NativeWindow Class
+
+The `NativeWindow` class creates a native OS window with an embedded webview. It wraps the Rust napi-rs addon (powered by [wry](https://github.com/tauri-apps/wry) + [tao](https://github.com/tauri-apps/tao)) and manages the lifecycle automatically:
+
+- **Auto-init** — the native subsystem initializes on first window creation
+- **Auto-pump** — events are pumped at ~60fps (16ms interval) automatically
+- **Auto-stop** — the event pump stops when all windows are closed
+
+```ts
+import { NativeWindow } from "@nativewindow/webview";
+
+const win = new NativeWindow({
+  title: "My App",
+  width: 1024,
+  height: 768,
+  devtools: true,
+});
+```
+
+## Properties
+
+### `id` (readonly)
+
+Unique numeric identifier for the window, assigned at construction time.
+
+```ts
+const win = new NativeWindow({ title: "My App" });
+console.log(win.id); // e.g. 1
+```
+
+## WindowOptions
+
+All options are optional. Pass them to the `NativeWindow` constructor:
+
+| Option            | Type       | Default | Description                                                                                                                                                                                                                                                              |
+| ----------------- | ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `title`           | `string`   | `""`    | Window title                                                                                                                                                                                                                                                             |
+| `width`           | `number`   | `800`   | Inner width in logical pixels                                                                                                                                                                                                                                            |
+| `height`          | `number`   | `600`   | Inner height in logical pixels                                                                                                                                                                                                                                           |
+| `x`               | `number`   | —       | X position in screen coordinates                                                                                                                                                                                                                                         |
+| `y`               | `number`   | —       | Y position in screen coordinates                                                                                                                                                                                                                                         |
+| `minWidth`        | `number`   | —       | Minimum inner width                                                                                                                                                                                                                                                      |
+| `minHeight`       | `number`   | —       | Minimum inner height                                                                                                                                                                                                                                                     |
+| `maxWidth`        | `number`   | —       | Maximum inner width                                                                                                                                                                                                                                                      |
+| `maxHeight`       | `number`   | —       | Maximum inner height                                                                                                                                                                                                                                                     |
+| `resizable`       | `boolean`  | `true`  | Allow window resizing                                                                                                                                                                                                                                                    |
+| `decorations`     | `boolean`  | `true`  | Show title bar and borders                                                                                                                                                                                                                                               |
+| `transparent`     | `boolean`  | `false` | Transparent window background                                                                                                                                                                                                                                            |
+| `alwaysOnTop`     | `boolean`  | `false` | Float above other windows                                                                                                                                                                                                                                                |
+| `visible`         | `boolean`  | `true`  | Show window immediately on creation                                                                                                                                                                                                                                      |
+| `devtools`        | `boolean`  | `false` | Enable browser devtools                                                                                                                                                                                                                                                  |
+| `csp`             | `string`   | —       | Content Security Policy injected at document start via a `<meta>` tag                                                                                                                                                                                                    |
+| `trustedOrigins`  | `string[]` | —       | Native-layer IPC origin filter; messages from non-matching origins are silently dropped (defense-in-depth — see also `trustedOrigins` in [Typed IPC](/ipc#trusted-origins))                                                                                              |
+| `allowedHosts`    | `string[]` | —       | Restrict all navigations to matching hosts. Supports wildcard prefixes (`"*.example.com"` matches subdomains and the base domain). Internal URLs (`about:blank`, `loadHtml()` content) are always permitted. See [Security guide](/security#navigation-host-restriction) |
+| `allowCamera`     | `boolean`  | `false` | Allow the webview to access the camera. All camera requests are denied by default. See [Security guide](/security#permission-controls)                                                                                                                                   |
+| `allowMicrophone` | `boolean`  | `false` | Allow the webview to access the microphone. All microphone requests are denied by default. See [Security guide](/security#permission-controls)                                                                                                                           |
+| `allowFileSystem` | `boolean`  | `false` | Allow the webview to use the File System Access API (`showOpenFilePicker`, `showSaveFilePicker`, `showDirectoryPicker`). Windows only — WebKit does not support this API on macOS or Linux. See [Security guide](/security#permission-controls)                          |
+
+## Content Loading
+
+### `loadUrl(url: string): void`
+
+Navigate the webview to a URL.
+
+```ts
+win.loadUrl("https://example.com");
+```
+
+> **Security:** `javascript:`, `file:`, `data:`, and `blob:` URL schemes are blocked and will throw an error. Only `http:` and `https:` URLs are allowed. See the [Security guide](/security#blocked-url-schemes) for details.
+
+### `loadHtml(html: string): void`
+
+Load an HTML string directly into the webview.
+
+```ts
+win.loadHtml("<h1>Hello</h1>");
+```
+
+> **Security:** Never interpolate unsanitized user input into HTML strings. Use a sanitization library such as [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html](https://github.com/apostrophecms/sanitize-html). See the [Security guide](/security) for details.
+
+### `unsafe.evaluateJs(script: string): void`
+
+Execute JavaScript in the webview context. This is fire-and-forget — there is no return value. Use `postMessage`/`onMessage` to send results back.
+
+Grouped under the `unsafe` namespace to signal injection risk.
+
+```ts
+win.unsafe.evaluateJs('document.title = "Updated"');
+```
+
+> **Security:** Never pass unsanitized user input directly. Use [`sanitizeForJs()`](#sanitizeforjs) to escape strings. See the [Security guide](/security) for details.
+
+### `postMessage(message: string): void`
+
+Send a string message to the webview. The message is delivered via the `window.__native_message__` callback on the webview side.
+
+```ts
+win.postMessage("data from host");
+```
+
+## Window Control
+
+| Method                                      | Description                               |
+| ------------------------------------------- | ----------------------------------------- |
+| `setTitle(title: string)`                   | Set the window title                      |
+| `setSize(width: number, height: number)`    | Set the window size in logical pixels     |
+| `setMinSize(width: number, height: number)` | Set minimum window size                   |
+| `setMaxSize(width: number, height: number)` | Set maximum window size                   |
+| `setPosition(x: number, y: number)`         | Set window position in screen coordinates |
+| `setResizable(resizable: boolean)`          | Enable or disable window resizing         |
+| `setDecorations(decorations: boolean)`      | Show or hide title bar and borders        |
+| `setAlwaysOnTop(alwaysOnTop: boolean)`      | Toggle always-on-top mode                 |
+
+## Window State
+
+| Method         | Description                             |
+| -------------- | --------------------------------------- |
+| `show()`       | Show the window                         |
+| `hide()`       | Hide the window                         |
+| `close()`      | Close and destroy the window            |
+| `focus()`      | Bring the window to focus               |
+| `maximize()`   | Maximize the window                     |
+| `minimize()`   | Minimize the window                     |
+| `unmaximize()` | Restore the window from maximized state |
+| `reload()`     | Reload the current page in the webview  |
+
+> **Note:** All public methods throw `Error("Window is closed")` if called after `close()`. The `NativeWindow` tracks its closed state internally and rejects further operations.
+
+## Events
+
+| Method                    | Callback Signature                                      |
+| ------------------------- | ------------------------------------------------------- |
+| `onMessage(cb)`           | `(message: string, sourceUrl: string) => void`          |
+| `onClose(cb)`             | `() => void`                                            |
+| `onResize(cb)`            | `(width: number, height: number) => void`               |
+| `onMove(cb)`              | `(x: number, y: number) => void`                        |
+| `onFocus(cb)`             | `() => void`                                            |
+| `onBlur(cb)`              | `() => void`                                            |
+| `onPageLoad(cb)`          | `(event: "started" \| "finished", url: string) => void` |
+| `onTitleChanged(cb)`      | `(title: string) => void`                               |
+| `onReload(cb)`            | `() => void`                                            |
+| `onNavigationBlocked(cb)` | `(url: string) => void`                                 |
+
+Example:
+
+```ts
+win.onPageLoad((event, url) => {
+  if (event === "finished") {
+    console.log("Page loaded:", url);
+  }
+});
+
+win.onResize((width, height) => {
+  console.log(`Window resized to ${width}x${height}`);
+});
+```
+
+> **Security:** The raw `onMessage` callback does not filter by origin — all messages from the webview are delivered regardless of the source page URL. Use the `sourceUrl` parameter to validate the origin yourself, or use [Typed IPC](/ipc) with `trustedOrigins` for automatic origin filtering.
+
+> **Note:** Calling `onClose()` more than once replaces the previous handler and emits a `console.warn`. Use a single handler with all your cleanup logic.
+
+### `onNavigationBlocked`
+
+Fired when a navigation is blocked by the [`allowedHosts`](#windowoptions) restriction. Use it to log blocked attempts or notify the user:
+
+```ts
+const win = new NativeWindow({
+  title: "My App",
+  allowedHosts: ["myapp.com", "*.cdn.myapp.com"],
+});
+
+win.onNavigationBlocked((url) => {
+  console.warn("Blocked navigation to:", url);
+});
+```
+
+## Cookie Access
+
+### `getCookies(url?: string): Promise<CookieInfo[]>`
+
+Query cookies from the native cookie store. Returns a Promise that resolves with validated `CookieInfo` objects, including `HttpOnly` cookies that are invisible to `document.cookie`.
+
+```ts
+const cookies = await win.getCookies("https://example.com");
+const session = cookies.find((c) => c.name === "session_id");
+if (session) {
+  console.log("Session:", session.value, "HttpOnly:", session.httpOnly);
+}
+```
+
+If `url` is provided, only cookies matching that URL are returned. If omitted, all cookies in the webview's cookie store are returned.
+
+Platform behavior:
+
+- Cookie access uses wry's cross-platform cookie API under the hood
+- If `url` is provided, only cookies matching that URL are returned on all platforms
+
+> **Security:** `getCookies()` returns `HttpOnly` cookies that are inaccessible to `document.cookie` in the webview. Treat the returned data as sensitive — do not expose cookie values to untrusted contexts.
+
+### `CookieInfo`
+
+Return type for each cookie from `getCookies()`:
+
+```ts
+interface CookieInfo {
+  name: string; // Cookie name
+  value: string; // Cookie value
+  domain: string; // Domain the cookie belongs to
+  path: string; // Path the cookie is restricted to
+  httpOnly: boolean; // Whether the cookie is HttpOnly (inaccessible to JS)
+  secure: boolean; // Whether the cookie requires HTTPS
+  sameSite: string; // SameSite policy: "none", "lax", or "strict"
+  expires: number; // Expiry as Unix timestamp (seconds); -1 for session cookies
+}
+```
+
+## Utility Functions
+
+### `sanitizeForJs`
+
+Escape a string for safe embedding inside a JavaScript string literal. Handles backslashes, quotes, backticks, template expressions (`${}`), newlines, null bytes, closing `</script>` tags, and Unicode line/paragraph separators.
+
+```ts
+import { NativeWindow, sanitizeForJs } from "@nativewindow/webview";
+
+const userInput = 'He said "hello"\n<script>alert(1)</script>';
+win.unsafe.evaluateJs(`display("${sanitizeForJs(userInput)}")`);
+```
+
+### `checkRuntime(): RuntimeInfo`
+
+Check if the native webview runtime is available. Returns `{ available: boolean, version?: string, platform: "macos" | "windows" | "linux" | "unsupported" }`.
+
+### `ensureRuntime(): RuntimeInfo`
+
+Check for the runtime and install it if missing (Windows only). Downloads the WebView2 Evergreen Bootstrapper (~2MB) from Microsoft and runs it silently. The downloaded executable is verified using Authenticode signature validation before execution — if verification fails, the bootstrapper is not executed and the function throws. Throws on failure.
+
+> **Security:** Do not call `ensureRuntime()` in an elevated (Administrator) context without explicit user consent — the silent installer applies system-wide. Prefer calling `checkRuntime()` first to avoid unnecessary network requests when the runtime is already present.
+
+### `RuntimeInfo`
+
+Return type for `checkRuntime()` and `ensureRuntime()`:
+
+```ts
+interface RuntimeInfo {
+  available: boolean;
+  version?: string;
+  platform: "macos" | "windows" | "linux" | "unsupported";
+}
+```
+
+## Legacy API
+
+The following functions exist for backward compatibility but are **not needed** when using the `NativeWindow` class, which manages initialization and event pumping automatically:
+
+| Function       | Description                                  |
+| -------------- | -------------------------------------------- |
+| `init()`       | Initialize the native window system manually |
+| `pumpEvents()` | Process pending native UI events manually    |
+
+## Known Limitations
+
+- **~16ms event latency** from the `pumpEvents()` polling interval
+- **HTML origin differences** — content loaded via `loadHtml()` has a `https://nativewindow.localhost` origin on Windows and a `nativewindow://localhost` origin on macOS and Linux (both are secure contexts). When configuring `trustedOrigins`, use the platform-appropriate value.
+- **No return values from `unsafe.evaluateJs()`** — use `postMessage`/`onMessage` to send results back
+- **2 MB HTML limit on Windows** when using `loadHtml()`
+- **10 MB message size limit** — messages larger than 10 MB are silently dropped at the native layer
+- **`javascript:`, `file:`, `data:`, and `blob:` URLs are blocked** — `loadUrl()` and in-page navigations reject these schemes
+- **Use `bun --watch`** (or equivalent) instead of `bun --hot` for development (native addon reloading requires a process restart)

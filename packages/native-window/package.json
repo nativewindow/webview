@@ -1,0 +1,77 @@
+{
+  "name": "@nativewindow/webview",
+  "version": "0.2.1",
+  "description": "Native OS webview windows for Bun & Node.js (alpha)",
+  "homepage": "https://native-window.fcannizzaro.com",
+  "bugs": {
+    "url": "https://github.com/fcannizzaro/native-window/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Francesco Saverio Cannizzaro (fcannizzaro)",
+    "url": "https://fcannizzaro.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcannizzaro/native-window"
+  },
+  "funding": [
+    {
+      "type": "patreon",
+      "url": "https://www.patreon.com/fcannizzaro"
+    }
+  ],
+  "files": [
+    "dist",
+    "native-window.js",
+    "native-window.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "napi build --release --platform && vite build",
+    "build:debug": "napi build --platform && vite build",
+    "build:ts": "vite build",
+    "version": "napi version"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0",
+    "@types/bun": "^1.3.9",
+    "vite": "^7.3.1",
+    "vite-plugin-dts": "^4.5.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "optionalDependencies": {
+    "@nativewindow/webview-darwin-arm64": "0.0.0",
+    "@nativewindow/webview-darwin-x64": "0.0.0",
+    "@nativewindow/webview-linux-arm64-gnu": "0.0.0",
+    "@nativewindow/webview-linux-x64-gnu": "0.0.0",
+    "@nativewindow/webview-win32-arm64-msvc": "0.0.0",
+    "@nativewindow/webview-win32-x64-msvc": "0.0.0"
+  },
+  "napi": {
+    "binaryName": "native-window",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu"
+    ]
+  }
+}

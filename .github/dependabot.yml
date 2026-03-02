@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/packages/native-window"
+    schedule:
+      interval: "weekly"
+    ignore:
+      # glib is locked to 0.18.x by tao/wry (gtk-rs 0.18 stack, Linux-only).
+      # No upgrade path exists until tao/wry migrate to gtk-rs 0.20 upstream.
+      - dependency-name: "glib"
+        versions: ["< 0.20.0"]

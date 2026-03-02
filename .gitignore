@@ -1,0 +1,55 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+.turbo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# Native addon binaries (built artifacts)
+*.node
+
+# Rust build output
+target
+
+# Compiled TS output (native-window)
+packages/native-window/index.js
+packages/native-window/index.cjs
+packages/native-window/index.d.ts
+
+# Agent
+.opencode
+opencode.json
+
+# built artifacts
+packages/native-window/index.js
+packages/native-window/index.cjs
+packages/native-window/index.d.ts

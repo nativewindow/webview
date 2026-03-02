@@ -1,0 +1,142 @@
+---
+title: Getting Started
+description: Install native-window and create your first native window
+---
+
+## Prerequisites
+
+- [Bun](https://bun.sh) (v1.3+), [Deno](https://deno.com) (v2+), or Node.js (v18+)
+- macOS, Windows, or Linux
+- On Windows 10, the WebView2 runtime may need to be installed (see [Runtime Check](#runtime-check) below)
+- On Linux, WebKitGTK development headers are required (e.g. `libwebkit2gtk-4.1-dev` on Ubuntu/Debian)
+
+## Installation
+
+Install the core package:
+
+```bash
+bun add @nativewindow/webview
+# or
+deno add npm:@nativewindow/webview
+```
+
+For typed IPC channels (optional):
+
+```bash
+bun add @nativewindow/ipc
+# or
+deno add npm:@nativewindow/ipc
+```
+
+If your webview app uses React, add the hooks package for idiomatic React integration:
+
+```bash
+bun add @nativewindow/react
+# or
+deno add npm:@nativewindow/react
+```
+
+If you use `native-window-ipc`, a schema library is **required** — schemas provide both TypeScript types and runtime validation for every IPC event. [Zod](https://zod.dev) is recommended, but [Valibot](https://valibot.dev) and any library implementing `safeParse()` also work. See [Supported Schema Libraries](/ipc#supported-schema-libraries) for details.
+
+```bash
+bun add zod
+# or
+deno add npm:zod
+```
+
+## Runtime Check
+
+On macOS, the webview engine (WebKit) is always available. On Linux, WebKitGTK must be installed. On Windows 10, you may need to install the WebView2 runtime. Use `checkRuntime()` to detect availability and `ensureRuntime()` to auto-install if missing:
+
+```ts
+import { checkRuntime, ensureRuntime } from "@nativewindow/webview";
+
+const info = checkRuntime();
+// { available: true,  version: "128.0.2739.42", platform: "windows" }
+// { available: false, version: undefined,        platform: "windows" }
+// { available: true,  version: undefined,        platform: "macos" }
+// { available: true,  version: undefined,        platform: "linux" }
+
+if (!info.available) {
+  console.log("WebView2 not found, installing...");
+  const result = ensureRuntime(); // downloads ~2MB bootstrapper, runs silently
+  console.log("Installed:", result.version);
+}
+```
+
+On Windows 11, WebView2 is pre-installed. On macOS and Linux, both functions return `{ available: true }` immediately.
+
+## Create a Window
+
+The `NativeWindow` class handles initialization and event pumping automatically. Just create an instance and start using it:
+
+```ts
+import { NativeWindow } from "@nativewindow/webview";
+
+const win = new NativeWindow({
+  title: "My App",
+  width: 800,
+  height: 600,
+});
+
+win.loadHtml(`
+  <h1>Hello from native webview!</h1>
+  <p>This is running inside a native OS window.</p>
+`);
+
+win.onClose(() => {
+  console.log("Window closed");
+  process.exit(0);
+});
+```
+
+When the first `NativeWindow` is created, the native subsystem initializes and starts pumping events at ~60fps. When all windows are closed, the pump stops automatically.
+
+## Load a URL
+
+Instead of inline HTML, you can load any URL:
+
+```ts
+win.loadUrl("https://example.com");
+```
+
+## Basic IPC
+
+The webview exposes a raw IPC bridge for message passing. On the webview side, use `window.ipc.postMessage()` to send messages and `window.__native_message__` to receive them. The `window.ipc` object is frozen and non-writable for security — it cannot be tampered with by page scripts:
+
+```ts
+import { NativeWindow } from "@nativewindow/webview";
+
+const win = new NativeWindow({ title: "IPC Demo" });
+
+win.loadHtml(`
+  <button onclick="window.ipc.postMessage('hello from webview')">
+    Send Message
+  </button>
+  <pre id="log"></pre>
+  <script>
+    window.__native_message__ = function(msg) {
+      document.getElementById('log').textContent += msg + '\\n';
+    };
+  </script>
+`);
+
+// Receive messages from the webview
+win.onMessage((msg, sourceUrl) => {
+  console.log("From webview:", msg);
+  // sourceUrl contains the page URL that sent the message
+  // Validate it if you need origin-based security
+  win.postMessage("Echo: " + msg);
+});
+
+win.onClose(() => process.exit(0));
+```
+
+This raw bridge sends and receives plain strings. The `onMessage` callback does not filter by origin — all messages are delivered regardless of the source page. For structured, type-safe messaging with origin filtering, see [Typed IPC](/ipc).
+
+## Next Steps
+
+- [NativeWindow API](/native-window) — full API reference for window options, methods, and events
+- [Typed IPC](/ipc) — compile-time checked messaging with event maps and runtime validation
+- [React Hooks](/react) — React hooks for typed IPC in webview apps
+- [Security](/security) — threat model and best practices for safe webview usage

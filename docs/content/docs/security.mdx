@@ -1,0 +1,388 @@
+---
+title: Security
+description: Security model and best practices for native-window
+---
+
+## Threat Model
+
+The webview is an **untrusted execution context**. Even if you control the HTML, the boundary between your host process (Bun/Deno/Node.js) and the webview (browser engine) is a trust boundary — similar to an iframe from a different origin. A compromised or malicious webview page can:
+
+- Send arbitrary messages via `window.ipc.postMessage()`
+- Send messages with unexpected payload shapes (TypeScript types are erased at runtime)
+- Attempt to exploit `loadHtml()` or `unsafe.evaluateJs()` if user input is interpolated
+
+Your host-side code should treat all data from the webview as untrusted input and validate it before acting on it.
+
+All native-layer security hardening — URL scheme blocking, Content Security Policy injection, trusted origin filtering, and webview surface hardening — is always compiled in on all supported platforms. No build-time feature flags are required.
+
+## Injection Risks
+
+### HTML Injection via `loadHtml()`
+
+If you interpolate user input into an HTML string passed to `loadHtml()`, an attacker can inject scripts:
+
+```ts
+// DANGEROUS: user input is interpolated directly
+const userInput = '<img onerror="alert(1)" src=x>';
+win.loadHtml(`<p>${userInput}</p>`);
+```
+
+**Mitigation:** Sanitize untrusted content using a dedicated library such as [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html](https://github.com/apostrophecms/sanitize-html):
+
+```ts
+import { NativeWindow } from "@nativewindow/webview";
+import DOMPurify from "dompurify";
+
+const userInput = '<img onerror="alert(1)" src=x>';
+win.loadHtml(`<p>${DOMPurify.sanitize(userInput)}</p>`);
+```
+
+### Script Injection via `unsafe.evaluateJs()`
+
+If you interpolate user input into a script passed to `unsafe.evaluateJs()`, an attacker can execute arbitrary code in the webview:
+
+```ts
+// DANGEROUS: user input is interpolated directly
+const userInput = '"; document.cookie; "';
+win.unsafe.evaluateJs(`display("${userInput}")`);
+```
+
+**Mitigation:** Use `sanitizeForJs()` to escape strings:
+
+```ts
+import { NativeWindow, sanitizeForJs } from "@nativewindow/webview";
+
+const userInput = '"; document.cookie; "';
+win.unsafe.evaluateJs(`display("${sanitizeForJs(userInput)}")`);
+// The input is safely escaped as a string literal
+```
+
+`sanitizeForJs()` handles backslashes, quotes, backticks, template expressions (`${}`), newlines, null bytes, closing `</script>` tags, and Unicode line/paragraph separators (U+2028, U+2029).
+
+## URL & Navigation Restrictions
+
+### Blocked URL Schemes
+
+`loadUrl()` blocks `javascript:`, `file:`, `data:`, and `blob:` URL schemes by default. Attempting to load these throws an error:
+
+```ts
+win.loadUrl("javascript:alert(1)"); // throws Error
+win.loadUrl("file:///etc/passwd"); // throws Error
+win.loadUrl("data:text/html,<script>alert(1)</script>"); // throws Error
+win.loadUrl("blob:https://example.com/uuid"); // throws Error
+```
+
+Additionally, navigations initiated from within the webview (e.g. clicking a link) are blocked for `javascript:`, `file:`, `data:`, and `blob:` schemes on all supported platforms. This prevents a compromised page from navigating to dangerous URLs.
+
+### Navigation Host Restriction
+
+The `allowedHosts` option in `WindowOptions` restricts **all** navigations — `loadUrl()`, link clicks, form submissions, and redirects — to URLs whose host matches one of the specified patterns:
+
+```ts
+const win = new NativeWindow({
+  title: "My App",
+  allowedHosts: ["myapp.com", "*.cdn.myapp.com"],
+});
+```
+
+Pattern matching is case-insensitive:
+
+- **Exact:** `"example.com"` matches only `example.com`
+- **Wildcard:** `"*.example.com"` matches any subdomain of `example.com` (`sub.example.com`, `a.b.example.com`) **and** `example.com` itself
+
+Internal navigations (`about:blank`, `nativewindow://localhost/`, `https://nativewindow.localhost/`, and `loadHtml()` content) are always permitted regardless of this setting. When `allowedHosts` is unset or empty, all hosts are allowed.
+
+Use `onNavigationBlocked` to observe blocked attempts:
+
+```ts
+win.onNavigationBlocked((url) => {
+  console.warn("Blocked navigation to:", url);
+});
+```
+
+> **Tip:** Combine `allowedHosts` with a [Content Security Policy](#content-security-policy) for defense-in-depth — CSP restricts what a loaded page can fetch and execute, while `allowedHosts` restricts where the webview can navigate.
+
+### `loadHtml()` Base URL
+
+Content loaded via `loadHtml()` uses a custom protocol that provides a proper origin on both platforms:
+
+- **macOS / Linux** — `nativewindow://localhost/` (WebKit treats registered custom schemes as secure contexts)
+- **Windows** — `https://nativewindow.localhost/` (WebView2 with HTTPS scheme mapping)
+
+Both origins are secure contexts, so APIs like `crypto.subtle`, `navigator.mediaDevices`, and CSP `'self'` work correctly on both platforms. Use `loadHtmlOrigin()` to get the correct origin for the current platform:
+
+```ts
+import { NativeWindow, loadHtmlOrigin } from "@nativewindow/webview";
+
+const win = new NativeWindow({
+  trustedOrigins: [loadHtmlOrigin()],
+});
+```
+
+### Runtime Installer Verification (Windows)
+
+On Windows, `ensureRuntime()` downloads the WebView2 Evergreen Bootstrapper from Microsoft. The downloaded executable is verified using Authenticode signature validation before execution. If signature verification fails, the bootstrapper is **not executed** and `ensureRuntime()` throws an error. This prevents executing tampered or corrupted binaries.
+
+> **Security:** Do not call `ensureRuntime()` in an elevated (Administrator) context without explicit user consent — the silent installer applies system-wide. Prefer calling `checkRuntime()` first to avoid unnecessary network requests when the runtime is already present.
+
+### Content Security Policy
+
+You can inject a Content Security Policy into all webview pages using the `csp` option in `WindowOptions`:
+
+```ts
+const win = new NativeWindow({
+  title: "My App",
+  csp: "default-src 'self'; script-src 'self' 'unsafe-inline'",
+});
+```
+
+When set, a `<meta http-equiv="Content-Security-Policy">` tag is injected at document start — before any page scripts run. This restricts what the loaded content can do (e.g. block inline scripts, limit resource origins, prevent connections to unknown hosts).
+
+The CSP is injected via wry's initialization script API and applies to all content including pages loaded via `loadUrl()` and `loadHtml()`.
+
+### Webview Surface Hardening (Windows)
+
+On Windows, the following WebView2 settings are applied by wry to reduce the attack surface:
+
+- **Context menus disabled** — right-click context menus are suppressed
+- **Status bar disabled** — the bottom status bar is hidden
+- **Built-in error page disabled** — the default WebView2 error page is suppressed
+
+## Webview Sandboxing
+
+The webview runs with a **deny-by-default** security posture. Permissions, popups, and file pickers are all blocked unless explicitly allowed. This limits the attack surface of loaded content — even if a page is compromised, it cannot access device hardware, open new windows, or trigger file selection dialogs.
+
+### Permission Controls
+
+Camera and microphone access are denied by default. Opt in per-window using `WindowOptions`:
+
+```ts
+const win = new NativeWindow({
+  title: "Video Chat",
+  allowCamera: true,
+  allowMicrophone: true,
+});
+```
+
+| Option            | Default | What it controls                                                                                          |
+| ----------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `allowCamera`     | `false` | Camera / video capture                                                                                    |
+| `allowMicrophone` | `false` | Microphone / audio capture                                                                                |
+| `allowFileSystem` | `false` | File System Access API (`showOpenFilePicker`, `showSaveFilePicker`, `showDirectoryPicker`) — Windows only |
+
+When both camera and microphone are requested simultaneously (e.g. `getUserMedia({ video: true, audio: true })`), **both** flags must be `true` for the request to be granted.
+
+> **Note:** Permission enforcement for `allowCamera`, `allowMicrophone`, and `allowFileSystem` is not yet available in the wry backend — OS defaults apply. These flags are reserved for future enforcement.
+
+> **Note:** `allowFileSystem` has no effect on macOS or Linux — WebKit does not support the File System Access API.
+
+### Popup Blocking
+
+All popup and new-window requests (`window.open()`, `target="_blank"` links) are **unconditionally blocked** on all platforms. There is no opt-in flag — popups are never allowed. This is enforced via wry's new-window request handler, which denies all requests.
+
+### File Picker Blocking
+
+File picker dialogs triggered by `<input type="file">` are **unconditionally blocked**. The dialog is silently suppressed — no file selection UI appears. This is enforced at the webview layer on all supported platforms.
+
+> **Tip:** Combine permission controls with a [Content Security Policy](#content-security-policy) for layered defense. For example, `"default-src 'self'; media-src 'none'"` blocks media loading at the content level, while `allowCamera: false` blocks it at the OS permission level.
+
+## IPC Security
+
+### Types Are Erased at Runtime
+
+TypeScript types provide compile-time safety on the host side, but they are erased at runtime. The webview can send any payload shape:
+
+```ts
+// Your schema says counter is a number...
+const schemas = { counter: z.number() };
+
+// ...but the webview can send anything
+__channel__.send("counter", "not a number");
+__channel__.send("counter", { malicious: true });
+```
+
+Schema validation catches these mismatches at runtime. Schemas are required when creating channels — every incoming payload is validated automatically.
+
+### Schema Validation
+
+Schemas are required on both host and client sides. They provide both TypeScript types and runtime validation:
+
+```ts
+import { z } from "zod";
+import { createChannel } from "@nativewindow/ipc";
+
+const ch = createChannel(win, {
+  schemas: {
+    "user-click": z.object({ x: z.number(), y: z.number() }),
+    counter: z.number().finite(),
+    message: z.string().max(1024),
+  },
+  onValidationError: (type, payload) => {
+    console.warn(`Rejected invalid "${type}" payload:`, payload);
+  },
+});
+```
+
+Invalid payloads are dropped before reaching your handlers. If `onValidationError` is not set, rejections are silent.
+
+The IPC package supports any schema library implementing the `safeParse()` interface, including [Zod](https://zod.dev), [Valibot](https://valibot.dev), and libraries following the [Standard Schema](https://github.com/standard-schema/standard-schema) spec.
+
+### The Raw Bridge Is Always Available
+
+The low-level IPC bridge (`window.ipc.postMessage()`) is always available in the webview, regardless of whether typed channels are used. The `window.ipc` object is frozen and non-writable — it cannot be reassigned, deleted, or modified by page scripts. A compromised page can still use it to send raw messages directly:
+
+```js
+// Bypasses the typed channel entirely
+window.ipc.postMessage("arbitrary string");
+window.ipc.postMessage(JSON.stringify({ $ch: "counter", p: "not a number" }));
+```
+
+This means:
+
+- **Typed channels do not replace validation** — they provide ergonomic type safety for development, not a security boundary
+- **Schema validation catches malformed payloads** — all incoming messages are validated against the schemas before reaching your handlers
+- **Non-envelope messages are ignored** — the typed channel only dispatches messages matching the `{ $ch, p }` envelope format
+- **Strict event allowlist** — messages with a `$ch` value that does not match any key in the schemas map are silently dropped, even if a handler was somehow registered for that type
+
+### IPC Bridge Hardening
+
+The native IPC bridge objects are protected against tampering:
+
+- **`window.ipc`** — defined with `Object.defineProperty` (non-writable, non-configurable) and frozen with `Object.freeze`. Cannot be reassigned, deleted, or have properties modified.
+- **`window.__channel__`** — defined with `Object.defineProperty` (non-writable, non-configurable). The first initializer wins; subsequent calls to `createChannelClient` do not overwrite it.
+- **`window.__native_message__`** — locked with `Object.defineProperty` (non-writable, non-configurable) after the client script sets it. Messages not matching any registered typed channel are forwarded to external listeners before falling through to the original handler.
+
+This prevents page scripts or third-party libraries from replacing the IPC bridge with malicious versions.
+
+### External Listener Registry
+
+The IPC client exposes `window.__native_message_listeners__` so that third-party integrations (such as the [TanStack DB adapter](/tsdb)) can receive non-channel IPC messages without replacing the frozen `window.__native_message__` handler. The registry is hardened with multiple layers of protection:
+
+- **Private internal array** — the actual listener array is a local variable inside the IPC client closure. It is not directly accessible from page scripts.
+- **Frozen registration API** — the exposed `window.__native_message_listeners__` object provides only `add(fn)` and `remove(fn)` methods. It is defined with `Object.defineProperty` (non-writable, non-configurable) and sealed with `Object.freeze`, so the methods cannot be replaced, deleted, or extended.
+- **Type validation** — `add()` checks `typeof fn === 'function'` before registering a handler. Non-function values are ignored.
+- **Fault isolation** — each external listener call is wrapped in `try/catch`. A throwing listener cannot break other listeners or the main IPC dispatch loop.
+- **Prototype pollution defense** — the injected script saves `Array.prototype.push`, `Array.prototype.indexOf`, and `Array.prototype.splice` at initialization and uses the saved references in the `add`/`remove` methods. This guards against attacks that override these Array methods before the IPC client loads.
+
+> **Note:** External listeners only receive messages that do not match any registered typed channel. Typed channel traffic (messages with a `$ch` matching a registered schema key) is dispatched to typed handlers and never forwarded to the external registry.
+
+### Message Size Limit
+
+A hard limit of **10 MB** is enforced at the native layer on all supported platforms. Messages exceeding this limit are silently dropped. This prevents denial-of-service via oversized payloads.
+
+At the IPC layer, a configurable `maxMessageSize` option (default: **1 MB**) is available in `ChannelOptions`. Messages exceeding this limit are dropped before JSON parsing, providing an additional layer of protection:
+
+```ts
+const ch = createChannel(win, {
+  schemas: { ping: z.string() },
+  maxMessageSize: 512_000, // 512 KB
+});
+```
+
+> **Note:** Outgoing `send()` payloads from the host are not validated at runtime — the host is a trusted context. Only incoming messages from the webview are subject to schema validation.
+
+### Rate Limiting
+
+The `rateLimit` option in `ChannelOptions` limits how many incoming IPC messages the channel accepts per second. When the limit is exceeded, additional messages are silently dropped until the sliding window advances. This prevents a malicious or compromised webview page from flooding the host with messages:
+
+```ts
+const ch = createChannel(win, {
+  schemas: { ping: z.string() },
+  rateLimit: 100, // max 100 messages per second
+});
+```
+
+Rate limiting is applied before JSON parsing and schema validation, so dropped messages incur minimal overhead. The default is unlimited — set a limit appropriate for your application's expected message frequency.
+
+> **Note:** The raw `onMessage` callback does not include rate limiting. Rate limiting only applies to typed channels created with `createChannel` or `createWindow`.
+
+### Channel Namespace
+
+The `channelId` option in `ChannelOptions` adds a namespace prefix to all `$ch` values in the IPC envelope. This prevents untrusted scripts in the webview from sending messages that match known event types:
+
+```ts
+const ch = createChannel(win, {
+  schemas: { ping: z.string() },
+  channelId: true, // auto-generate a random 8-character nonce
+});
+```
+
+When `channelId` is set, the envelope format changes from `{ $ch: "ping", p: ... }` to `{ $ch: "abc12345:ping", p: ... }`. Messages with a missing or incorrect prefix are silently dropped. The injected client script automatically uses the same prefix, so host and client stay in sync.
+
+- Pass a `string` for a fixed namespace
+- Pass `true` to auto-generate a random 8-character nonce (recommended for most cases)
+
+Since the nonce is generated at channel creation time and injected into the client script, a malicious script that loads after the IPC client cannot guess the namespace prefix.
+
+## Origin Control
+
+### Trusted Origins
+
+When loading external URLs, you can restrict which pages receive the IPC client script using `trustedOrigins`:
+
+```ts
+const ch = createChannel(win, {
+  schemas: { ping: z.string() },
+  trustedOrigins: ["https://myapp.com"],
+});
+```
+
+This prevents the typed IPC client from being injected on untrusted pages after navigation. When `trustedOrigins` is set, the initial injection is **deferred** until the first `onPageLoad("finished")` event from a trusted origin — the IPC bridge is not available on untrusted initial content (e.g. `about:blank`). On subsequent navigations, the client script is only re-injected if the page URL's origin matches.
+
+### How It Works
+
+The `trustedOrigins` option controls two things:
+
+1. **Client injection** — the typed IPC client (`window.__channel__`) is only injected on pages whose origin matches
+2. **Message filtering** — incoming messages are checked against the source page URL origin and dropped if it does not match
+
+The native `onMessage` callback receives both the message string and the source page URL, which the IPC layer uses for origin-based filtering.
+
+### Limitations
+
+- **Raw bridge is unrestricted** — `trustedOrigins` filters typed channel messages, but the raw `window.ipc.postMessage()` bridge is always available regardless of origin (though the bridge object itself is frozen and tamper-proof)
+- **Defense-in-depth** — combine IPC-layer `trustedOrigins` with native-layer `trustedOrigins` and schema validation for the best protection
+
+### Native-Layer Origin Filtering
+
+In addition to the IPC-layer `trustedOrigins` in `ChannelOptions`, you can set `trustedOrigins` directly on `WindowOptions` for defense-in-depth at the native layer:
+
+```ts
+const win = new NativeWindow({
+  title: "My App",
+  trustedOrigins: ["https://myapp.com"],
+});
+```
+
+When set, the native IPC handler extracts the origin from the source URL and checks it against the configured list **before** forwarding to the host. Messages from non-matching origins are silently dropped at the Rust layer — they never reach the `onMessage` callback or the typed channel. This check is always compiled in on all supported platforms.
+
+This is independent of the IPC-layer `trustedOrigins` and operates at a lower level. Both can be used together for layered security.
+
+## Cookie Access
+
+The `getCookies()` method on `NativeWindow` returns cookies from the native cookie store, including `HttpOnly` cookies that are invisible to `document.cookie` in the webview. This is useful for reading authentication tokens or session identifiers, but the returned data should be treated as sensitive:
+
+- **Do not forward cookie values to the webview** via IPC or `evaluateJs()` — this would defeat the purpose of `HttpOnly` protection
+- **Do not log cookie values** in production — treat them with the same care as passwords or tokens
+- **Scope queries with a URL** — pass a URL to `getCookies("https://example.com")` to limit results to cookies matching that URL, rather than retrieving all cookies
+
+See the [NativeWindow API reference](/native-window#cookie-access) for usage details.
+
+## Best Practices
+
+- **Always validate incoming IPC payloads at runtime** — schemas are required when creating channels, ensuring all payloads are validated automatically. Never trust TypeScript types alone for data from the webview.
+- **Use schemas for all events** — schemas keep your type definitions and validation logic in sync, reducing the chance of drift.
+- **Set a Content Security Policy** — use the `csp` option in `WindowOptions` to restrict what loaded content can do (inline scripts, resource origins, etc.).
+- **Use a sanitization library for user content in HTML** — prevent XSS when using `loadHtml()` with dynamic content. Use [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html](https://github.com/apostrophecms/sanitize-html).
+- **Use `sanitizeForJs()` for user content in scripts** — prevent injection when using `win.unsafe.evaluateJs()` with dynamic strings. This now also escapes backticks and template expressions.
+- **Set `trustedOrigins` when loading external URLs** — use the IPC-layer `trustedOrigins` in `ChannelOptions` to control client injection and message filtering, and/or the native-layer `trustedOrigins` in `WindowOptions` for defense-in-depth origin filtering at the Rust layer.
+- **Validate `sourceUrl` when using raw `onMessage`** — the native `onMessage` callback does not filter by origin at the raw level unless native-layer `trustedOrigins` is set. Check the `sourceUrl` parameter if you need origin-based security without typed channels.
+- **Treat the webview as an untrusted client** — apply the same input validation and sanitization you would for any client-server boundary.
+- **`devtools` defaults to `false`** — devtools are disabled by default. Only set `devtools: true` during development; avoid enabling it in production to reduce the attack surface.
+- **Limit message size** — a 10 MB hard limit is enforced at the native layer. For application-level limits, use the `maxMessageSize` option in `ChannelOptions` (default: 1 MB) and validate string lengths and object sizes in your schemas.
+- **Do not call `onClose` multiple times** — calling `onClose()` more than once replaces the previous handler and emits a console warning. Use a single handler with your cleanup logic.
+- **Use the external listener registry for third-party message handlers** — do not attempt to replace `window.__native_message__` directly, as it is frozen after the IPC client initializes. Use `window.__native_message_listeners__.add(fn)` instead.
+- **Handle closed windows** — all public methods on `NativeWindow` throw `Error("Window is closed")` after `close()` is called. Ensure your code handles this if it holds long-lived references to window instances.
+- **Set a `rateLimit` when loading untrusted content** — the `rateLimit` option in `ChannelOptions` prevents a malicious page from flooding the host with IPC messages. Choose a limit appropriate for your application's expected message frequency.
+- **Use `channelId` to namespace your channel** — setting `channelId: true` generates a random namespace prefix that prevents untrusted scripts from spoofing known event types. This is especially important when loading third-party content.
+- **Do not forward `HttpOnly` cookies to the webview** — `getCookies()` returns `HttpOnly` cookies from the native cookie store. Forwarding these values to the webview via IPC or `evaluateJs()` would defeat the browser's `HttpOnly` protection. Keep cookie data on the host side.

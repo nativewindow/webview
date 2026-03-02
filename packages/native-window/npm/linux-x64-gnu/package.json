@@ -1,0 +1,22 @@
+{
+  "name": "@nativewindow/webview-linux-x64-gnu",
+  "version": "0.0.0",
+  "description": "Native window addon for Linux x64",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcannizzaro/native-window"
+  },
+  "files": [
+    "native-window.linux-x64-gnu.node"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "native-window.linux-x64-gnu.node",
+  "engines": {
+    "node": ">= 10"
+  }
+}

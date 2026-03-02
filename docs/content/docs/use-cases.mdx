@@ -1,0 +1,212 @@
+---
+title: Use Cases
+description: Real-world scenarios where native-window shines
+---
+
+## Plugin Companion Windows
+
+Plugin systems like **Elgato Stream Deck**, OBS, or Raycast often limit UI to small panels or fixed layouts. With native-window you can spawn a full desktop window from your plugin process, giving users a larger interactive surface while keeping bidirectional communication with the plugin host via typed IPC.
+
+For example, a Stream Deck plugin can open a webview to display a rich dashboard, receive key-press events from the host, and send configuration changes back — all type-safe:
+
+```ts
+import { z } from "zod";
+import { createWindow } from "@nativewindow/ipc";
+
+const ch = createWindow(
+  { title: "Stream Deck Companion", width: 720, height: 480 },
+  {
+    schemas: {
+      keyPress: z.object({ row: z.number(), col: z.number() }),
+      setKeyImage: z.object({ key: z.number(), src: z.string() }),
+    },
+  },
+);
+
+ch.window.loadUrl("https://localhost:3000/dashboard");
+
+// Forward key presses from the plugin SDK to the webview
+onStreamDeckKeyDown((row, col) => {
+  ch.send("keyPress", { row, col });
+});
+
+// Receive image updates from the webview
+ch.on("setKeyImage", ({ key, src }) => {
+  streamDeck.setKeyImage(key, src);
+});
+```
+
+This pattern works for any plugin system that runs inside a Node.js, Deno or Bun host process and needs a richer UI than the plugin framework provides.
+
+## Developer and Internal Tools
+
+Building a quick GUI tool — a database browser, log inspector, config editor, or API tester — usually means choosing between a CLI or shipping a full Electron app. native-window sits in between: your Bun/Deno/Node.js script gets a real desktop window without bundling Chromium.
+
+```ts
+import { NativeWindow } from "@nativewindow/webview";
+
+const win = new NativeWindow({ title: "DB Inspector", width: 1024, height: 768 });
+win.loadUrl("http://localhost:5173"); // Vite dev server with your UI
+
+win.onClose(() => process.exit(0));
+```
+
+Because the host process has full access to the file system, network, and native modules, you can build tools that talk to databases, read local configs, or call system APIs — all while rendering the UI in a lightweight native webview.
+
+## CLI Companion UIs
+
+Many CLI tools produce output that is better understood visually — markdown renderers, data charts, image previews, or build-pipeline dashboards. Instead of piping to the terminal, spawn a webview window alongside your CLI:
+
+```ts
+import { z } from "zod";
+import { createWindow } from "@nativewindow/ipc";
+
+const ch = createWindow({ title: "Markdown Preview" }, { schemas: { render: z.string() } });
+
+ch.window.loadHtml(`
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css">
+  <article class="markdown-body" id="content"></article>
+  <script>
+    __channel__.on("render", (html) => {
+      document.getElementById("content").innerHTML = html;
+    });
+  </script>
+`);
+
+// Watch a file and push rendered HTML to the webview
+import { watch } from "fs";
+watch("README.md", async () => {
+  const md = await Bun.file("README.md").text();
+  ch.send("render", marked(md));
+});
+```
+
+The CLI keeps running in the terminal for input and logging, while the webview provides the visual output.
+
+## Local-First Desktop Apps
+
+For apps where data must stay on the user's machine — note-taking, personal finance trackers, password vaults — native-window lets the host process handle file I/O, encryption, and storage while the webview provides the UI. No data ever leaves the local machine unless you explicitly send it.
+
+```ts
+import { z } from "zod";
+import { createWindow } from "@nativewindow/ipc";
+import { Database } from "bun:sqlite";
+
+const db = new Database("notes.sqlite");
+
+const ch = createWindow(
+  { title: "Notes" },
+  {
+    schemas: {
+      saveNote: z.object({ id: z.string(), content: z.string() }),
+      loadNotes: z.object({}),
+      notesList: z.array(z.object({ id: z.string(), content: z.string() })),
+    },
+  },
+);
+
+ch.on("saveNote", ({ id, content }) => {
+  db.run("INSERT OR REPLACE INTO notes (id, content) VALUES (?, ?)", [id, content]);
+});
+
+ch.on("loadNotes", () => {
+  const notes = db.query("SELECT id, content FROM notes").all();
+  ch.send("notesList", notes);
+});
+```
+
+The webview is purely a rendering layer — all sensitive operations (database, crypto, disk access) happen in the trusted host process.
+
+## Hardware and IoT Control Panels
+
+When you need a control panel for hardware devices — 3D printers, microcontrollers, home automation hubs — the host process handles serial ports, USB, or network protocols while the webview displays real-time status and controls:
+
+```ts
+import { z } from "zod";
+import { createWindow } from "@nativewindow/ipc";
+import { SerialPort } from "serialport";
+
+const port = new SerialPort({ path: "/dev/ttyUSB0", baudRate: 9600 });
+
+const ch = createWindow(
+  { title: "Device Monitor" },
+  {
+    schemas: {
+      sensorData: z.object({ temp: z.number(), humidity: z.number() }),
+      sendCommand: z.string(),
+    },
+  },
+);
+
+// Stream sensor readings to the webview
+port.on("data", (buf) => {
+  const { temp, humidity } = parseSensorData(buf);
+  ch.send("sensorData", { temp, humidity });
+});
+
+// Send commands from the webview to the device
+ch.on("sendCommand", (cmd) => {
+  port.write(cmd + "\n");
+});
+```
+
+This is much lighter than Electron for single-purpose hardware UIs, and the typed IPC ensures the webview and host stay in sync.
+
+## Kiosk and Digital Signage
+
+For retail displays, exhibition kiosks, museum info boards, or restaurant menus, you need a fullscreen window showing web content — but shipping a bundled Chromium runtime is overkill. native-window uses the OS-provided webview engine, keeping the deployment minimal:
+
+```ts
+import { NativeWindow } from "@nativewindow/webview";
+
+const win = new NativeWindow({
+  title: "Menu Board",
+  decorations: false,
+});
+
+win.loadUrl("https://signage.example.com/display/1");
+```
+
+The host process can handle scheduling, content updates, or watchdog restarts while the webview renders the content.
+
+## Desktop Automation Dashboards
+
+Scripts that automate file processing, deployments, data pipelines, or batch operations often run headless. Adding a webview window gives you a live progress UI without pulling in a heavy framework:
+
+```ts
+import { z } from "zod";
+import { createWindow } from "@nativewindow/ipc";
+
+const ch = createWindow(
+  { title: "Deploy Progress", width: 500, height: 300 },
+  {
+    schemas: {
+      progress: z.object({ step: z.string(), pct: z.number() }),
+      done: z.object({ success: z.boolean(), message: z.string() }),
+    },
+  },
+);
+
+ch.window.loadHtml(`
+  <div id="step"></div>
+  <progress id="bar" max="100" value="0" style="width:100%"></progress>
+  <script>
+    __channel__.on("progress", ({ step, pct }) => {
+      document.getElementById("step").textContent = step;
+      document.getElementById("bar").value = pct;
+    });
+    __channel__.on("done", ({ success, message }) => {
+      document.getElementById("step").textContent = success ? message : "Failed: " + message;
+    });
+  </script>
+`);
+
+// Run your pipeline and report progress
+for (const step of pipeline) {
+  ch.send("progress", { step: step.name, pct: step.progress });
+  await step.run();
+}
+ch.send("done", { success: true, message: "Deployment complete" });
+```
+
+The window appears only when needed and closes when the task finishes — no browser tabs, no Electron overhead.
