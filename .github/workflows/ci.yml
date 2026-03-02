@@ -1,0 +1,64 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/**"
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build-webview-macos:
+    name: Build Native macOS (smoke test)
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            packages/webview/target/
+          key: cargo-macos-arm64-${{ hashFiles('packages/webview/Cargo.lock') }}
+          restore-keys: cargo-macos-arm64-
+
+      - run: bun run build
+        working-directory: packages/webview
+
+      - name: Test packages
+        run: bun run test
+
+  build-webview-windows:
+    name: Build Native Windows (smoke test)
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            packages/webview/target/
+          key: cargo-windows-x64-${{ hashFiles('packages/webview/Cargo.lock') }}
+          restore-keys: cargo-windows-x64-
+
+      - run: bun run build
+        working-directory: packages/webview
+
+      - name: Test packages
+        run: bun run test

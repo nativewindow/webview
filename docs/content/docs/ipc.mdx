@@ -1,0 +1,288 @@
+---
+title: Typed IPC
+description: Type-safe bidirectional messaging between host and webview
+---
+
+## Overview
+
+The `@nativewindow/ipc` package adds a typed messaging layer on top of the raw `postMessage`/`onMessage` bridge. It gives you:
+
+- **Compile-time type checking** — event names and payload types are validated by TypeScript
+- **Structured wire format** — messages are encoded as JSON envelopes (`{ $ch: string, p: unknown }`)
+- **Auto-injection** — the webview-side client script is injected automatically and re-injected on navigation
+- **Required schema validation** — all incoming payloads are validated at runtime against schemas
+- **Multi-library support** — works with Zod, Valibot, and any schema library implementing `safeParse()`
+
+The package is pure TypeScript with zero runtime dependencies. It works with both inline HTML and bundled webview apps.
+
+## Schema-First Approach
+
+Define schemas for your events. Types are inferred automatically — no separate type definition needed:
+
+```ts
+import { z } from "zod";
+
+const schemas = {
+  /** Webview -> Host: user clicked somewhere */
+  "user-click": z.object({ x: z.number(), y: z.number() }),
+  /** Webview -> Host: counter value */
+  counter: z.number(),
+  /** Host -> Webview: update the title */
+  "update-title": z.string(),
+  /** Host -> Webview: echo a message */
+  echo: z.string(),
+};
+```
+
+Schemas serve as the single source of truth for both types and validation.
+
+## Host Side
+
+### `createWindow`
+
+The simplest way to get started. Creates a `NativeWindow` and wraps it with a typed channel in one call:
+
+```ts
+import { z } from "zod";
+import { createWindow } from "@nativewindow/ipc";
+
+const schemas = {
+  "user-click": z.object({ x: z.number(), y: z.number() }),
+  counter: z.number(),
+  "update-title": z.string(),
+  echo: z.string(),
+};
+
+const ch = createWindow({ title: "My App", width: 800, height: 600 }, { schemas });
+
+// Send typed messages to the webview
+ch.send("update-title", "Hello!"); // payload must be string
+ch.send("echo", "Welcome"); // payload must be string
+
+// Receive typed messages from the webview
+ch.on("user-click", (pos) => {
+  // pos: { x: number; y: number }
+  console.log(`Click at ${pos.x}, ${pos.y}`);
+});
+
+ch.on("counter", (n) => {
+  // n: number
+  console.log(`Counter: ${n}`);
+});
+
+// Access the underlying NativeWindow
+ch.window.loadHtml(`<html>...</html>`);
+ch.window.onClose(() => process.exit(0));
+```
+
+Type errors are caught at compile time:
+
+```ts
+ch.send("counter", "wrong"); // Type error: string not assignable to number
+ch.send("typo", 123); // Type error: "typo" does not exist
+ch.on("counter", (s: string) => {}); // Type error: string not assignable to number
+```
+
+### `createChannel`
+
+If you already have a `NativeWindow` instance, wrap it with `createChannel`:
+
+```ts
+import { z } from "zod";
+import { NativeWindow } from "@nativewindow/webview";
+import { createChannel } from "@nativewindow/ipc";
+
+const win = new NativeWindow({ title: "App" });
+const ch = createChannel(win, {
+  schemas: {
+    ping: z.string(),
+    pong: z.number(),
+  },
+});
+
+ch.send("ping", "hello"); // typed as string
+ch.on("pong", (n) => {}); // n: number
+```
+
+### `TypedChannel` Interface
+
+Both `createChannel` and `createWindow` return an object implementing `TypedChannel<T>`:
+
+```ts
+interface TypedChannel<T extends EventMap> {
+  send<K extends keyof T & string>(...args: SendArgs<T, K>): void;
+  on<K extends keyof T & string>(type: K, handler: (payload: T[K]) => void): void;
+  off<K extends keyof T & string>(type: K, handler: (payload: T[K]) => void): void;
+}
+```
+
+The `send()` method uses the `SendArgs` helper type: when the payload type for an event is `void` or `never`, the payload argument is optional — you can write `ch.send("ping")` instead of `ch.send("ping", undefined)`.
+
+The `NativeWindowChannel<T>` returned by `createChannel`/`createWindow` extends this with a `readonly window` property.
+
+## Webview Side
+
+### Auto-Injected Client
+
+When you use `createChannel` or `createWindow`, a client script is automatically injected into the webview. It exposes a `window.__channel__` object with the same `send`/`on`/`off` API:
+
+> **Security:** The `window.__channel__` object is defined with `Object.defineProperty` (non-writable, non-configurable). Once set by the first initializer, it cannot be reassigned or deleted by page scripts. Similarly, `window.__native_message__` is locked after the client script sets it. The injected script captures `Array.prototype.slice`, `Array.prototype.filter`, `Array.prototype.push`, `Array.prototype.indexOf`, and `Array.prototype.splice` at initialization to guard against prototype pollution. A frozen `window.__native_message_listeners__` registration API is also exposed for third-party message handlers (see [Security](/security#external-listener-registry)).
+
+```html
+<script>
+  // __channel__ is available immediately (injected by createChannel)
+  __channel__.send("user-click", { x: 10, y: 20 });
+  __channel__.send("counter", 42);
+
+  __channel__.on("update-title", function (title) {
+    document.title = title;
+  });
+
+  __channel__.on("echo", function (msg) {
+    console.log("Echo:", msg);
+  });
+</script>
+```
+
+The client script is re-injected on every page navigation so it survives `loadUrl()` calls. Disable auto-injection with `{ injectClient: false }`.
+
+> **Note:** The injected client is plain JavaScript — there are no TypeScript types at runtime. Type safety is enforced on the host side only. Always validate payloads at runtime. See [Schema Validation](#schema-validation).
+
+### Bundled Import
+
+For webview apps bundled with their own build step (Vite, webpack, etc.), import the typed client directly instead of relying on the injected script:
+
+```ts
+import { z } from "zod";
+import { createChannelClient } from "@nativewindow/ipc/client";
+
+const ch = createChannelClient({
+  schemas: {
+    "update-title": z.string(),
+    echo: z.string(),
+  },
+});
+
+// Fully typed on the webview side too
+ch.on("update-title", (title) => {
+  // title: string
+  document.title = title;
+});
+```
+
+`createChannelClient` connects to the native IPC bridge. If `window.__channel__` was already set by the auto-injected script (which locks the property with `Object.defineProperty`), calling `createChannelClient` will not overwrite it — the first initializer wins. If auto-injection is disabled, `createChannelClient` will initialize `window.__channel__` and lock it.
+
+`createChannelClient` also sets up `window.__native_message_listeners__`, a frozen registration API that allows third-party integrations like the [TanStack DB adapter](/tsdb) to register message handlers without replacing the frozen `window.__native_message__` callback.
+
+### `ChannelClientOptions`
+
+| Option              | Type                      | Default        | Description                                                         |
+| ------------------- | ------------------------- | -------------- | ------------------------------------------------------------------- |
+| `schemas`           | `SchemaMap`               | **(required)** | Schemas for incoming events — provides types and runtime validation |
+| `onValidationError` | `(type, payload) => void` | —              | Called when an incoming payload fails validation                    |
+
+### Manual Injection
+
+You can also get the client script as a string for manual injection:
+
+```ts
+import { getClientScript } from "@nativewindow/ipc";
+
+const script = getClientScript();
+win.unsafe.evaluateJs(script);
+```
+
+When using `channelId`, pass it to `getClientScript` so the injected client uses the same namespace:
+
+```ts
+const script = getClientScript({ channelId: "my-namespace" });
+win.unsafe.evaluateJs(script);
+```
+
+## Channel Options
+
+Pass options as the second argument to `createChannel` or `createWindow`:
+
+```ts
+const ch = createChannel(win, {
+  schemas: { ping: z.string(), pong: z.number() },
+  injectClient: true,
+  onValidationError: (type, payload) => {
+    /* ... */
+  },
+  trustedOrigins: ["https://myapp.com"],
+  channelId: true, // auto-generate a random namespace
+  rateLimit: 100, // max 100 messages per second
+});
+```
+
+| Option                 | Type                      | Default        | Description                                                                                                                                                                               |
+| ---------------------- | ------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemas`              | `SchemaMap`               | **(required)** | Schemas for runtime validation + type inference                                                                                                                                           |
+| `injectClient`         | `boolean`                 | `true`         | Auto-inject the client script into the webview                                                                                                                                            |
+| `onValidationError`    | `(type, payload) => void` | —              | Called when a payload fails validation                                                                                                                                                    |
+| `trustedOrigins`       | `string[]`                | —              | Restrict client script injection and incoming messages to these origins                                                                                                                   |
+| `maxMessageSize`       | `number`                  | `1_048_576`    | Max incoming message size in characters; larger messages are silently dropped                                                                                                             |
+| `rateLimit`            | `number`                  | —              | Max incoming messages per second (sliding window); excess messages are silently dropped                                                                                                   |
+| `maxListenersPerEvent` | `number`                  | —              | Max listeners per event type; calls to `on()` beyond the limit are silently ignored                                                                                                       |
+| `channelId`            | `string \| true`          | —              | Channel namespace. All `$ch` envelope values are prefixed with `channelId:`. Pass `true` to auto-generate a random 8-character nonce. Prevents namespace squatting from untrusted scripts |
+
+## Schema Validation
+
+TypeScript types are erased at runtime. The webview is an untrusted execution context — it can send any payload shape regardless of your type definitions. Schemas are **required** when creating channels to ensure all incoming payloads are validated.
+
+### Supported Schema Libraries
+
+The IPC package defines a `SchemaLike` interface that requires only a `safeParse()` method. Any schema library implementing this interface works out of the box:
+
+- **[Zod](https://zod.dev)** (v4+) — types inferred via `_zod.output`
+- **[Valibot](https://valibot.dev)** (v1+) — types inferred via `_types.output`
+- **[Standard Schema](https://github.com/standard-schema/standard-schema)** — types inferred via `~standard.types.output`
+
+For libraries not matching any of these inference patterns, the inferred type falls back to `unknown`.
+
+### How It Works
+
+When a message arrives, the channel looks up the schema for the event name and calls `safeParse()` on the payload. If validation fails, the message is dropped and `onValidationError` is called (if provided). If validation succeeds, the payload is passed to the registered handler.
+
+```ts
+const ch = createChannel(win, {
+  schemas: {
+    "user-click": z.object({ x: z.number(), y: z.number() }),
+    counter: z.number().finite(),
+    message: z.string().max(1024),
+  },
+  onValidationError: (type, payload) => {
+    console.warn(`Rejected invalid "${type}" payload:`, payload);
+  },
+});
+
+// Only valid payloads reach your handlers
+ch.on("user-click", (pos) => {
+  // pos is guaranteed to be { x: number; y: number }
+  console.log(pos.x, pos.y);
+});
+```
+
+> **Note:** Only **incoming** messages from the webview are validated against schemas at runtime. Outgoing `send()` payloads from the host are not validated — the host is a trusted context. TypeScript enforces type correctness at compile time for outgoing messages.
+
+## Trusted Origins
+
+When navigating to external URLs, you may want to restrict where the IPC client is injected. The `trustedOrigins` option controls this:
+
+```ts
+const ch = createChannel(win, {
+  schemas: { ping: z.string() },
+  trustedOrigins: ["https://myapp.com", "https://cdn.myapp.com"],
+});
+```
+
+Behavior:
+
+- When `trustedOrigins` is **not** set, the client script is injected immediately and re-injected on every page load
+- When `trustedOrigins` is set, the initial injection is **deferred** until the first `onPageLoad("finished")` event from a trusted origin — this prevents the IPC bridge from being available on untrusted initial content (e.g. `about:blank`)
+- On subsequent page loads, the client is only re-injected if the page URL's origin matches one of the trusted origins
+- **Incoming messages** from non-matching origins are silently dropped
+- If `trustedOrigins` is not set, re-injection and message delivery are unrestricted
+
+> **Note:** `trustedOrigins` controls both client script injection and incoming message filtering. However, the raw IPC bridge (`window.ipc.postMessage`) remains available on the webview side regardless. See the [Security guide](/security) for the full threat model.

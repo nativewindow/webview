@@ -1,0 +1,22 @@
+{
+  "name": "@nativewindow/webview-darwin-arm64",
+  "version": "0.0.0",
+  "description": "Native window addon for macOS ARM64",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nativewindow/webview"
+  },
+  "files": [
+    "native-window.darwin-arm64.node"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "native-window.darwin-arm64.node",
+  "engines": {
+    "node": ">= 10"
+  }
+}

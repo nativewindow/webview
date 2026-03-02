@@ -1,0 +1,16 @@
+# ExoCommand Configuration
+
+build-native-addon:
+  description: "Build the native window module"
+  command: "bun napi build --release --platform && bun vite build"
+  cwd: ./packages/webview
+
+fmt-native-addon:
+  description: "Format the code for the native window module"
+  command: "cargo fmt --all"
+  cwd: ./packages/webview/src
+
+clippy-native-addon:
+  description: "Run Rust linter (clippy) for the native window module"
+  command: "cargo clippy"
+  cwd: ./packages/webview

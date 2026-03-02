@@ -1,0 +1,76 @@
+---
+title: Comparison
+description: How native-window compares to Electron, Tauri, and other solutions
+---
+
+## Overview
+
+native-window is not a full application framework — it is a **native addon** that gives any Bun, Deno or Node.js script access to OS webview windows. This makes it fundamentally different from tools like Electron or Tauri, which provide a complete app shell with bundling, packaging, and distribution.
+
+The comparison below highlights where native-window fits and where a full framework might be a better choice.
+
+## Feature Comparison
+
+| Feature                                         | native-window | Electron |  Tauri  | Neutralinojs | webview (Go/C) |
+| ----------------------------------------------- | :-----------: | :------: | :-----: | :----------: | :------------: |
+| Uses OS webview (no bundled Chromium)           |      ✅       |    ❌    |   ✅    |      ✅      |       ✅       |
+| Embeddable in existing Bun/Deno/Node.js scripts |      ✅       |    ❌    |   ❌    |      ❌      |       ❌       |
+| No app scaffold required                        |      ✅       |    ❌    |   ❌    |      ❌      |       ✅       |
+| napi-rs native addon                            |      ✅       |    ❌    |   ❌    |      ❌      |       ❌       |
+| Typed IPC with schema validation                |      ✅       |    ❌    |   ❌    |      ❌      |       ❌       |
+| Multi-window support                            |      ✅       |    ✅    |   ✅    |      ✅      |       ❌       |
+| Custom protocol handler                         |      ✅       |    ✅    |   ✅    |      ❌      |       ❌       |
+| macOS                                           |      ✅       |    ✅    |   ✅    |      ✅      |       ✅       |
+| Windows                                         |      ✅       |    ✅    |   ✅    |      ✅      |       ✅       |
+| Linux                                           |      ✅       |    ✅    |   ✅    |      ✅      |       ✅       |
+| System tray                                     |      ❌       |    ✅    |   ✅    |      ✅      |       ❌       |
+| Native menus                                    |      ❌       |    ✅    |   ✅    |      ✅      |       ❌       |
+| Auto-updater                                    |      ❌       |    ✅    |   ✅    |      ✅      |       ❌       |
+| App bundling / packaging                        |      ❌       |    ✅    |   ✅    |      ✅      |       ❌       |
+| Minimal app size                                |   < 1.5 MB    | ~150 MB+ | ~3-6 MB |    ~3 MB     |     ~1 MB      |
+
+> **Size note:** native-window ships only the napi-rs addon (< 1.5 MB per platform). Electron bundles a full Chromium runtime. Tauri, Neutralinojs, and webview use the OS-provided webview engine, keeping size small. Sizes are approximate and depend on the application.
+
+## vs Electron
+
+Electron is the most established desktop webview framework. It bundles a full Chromium engine, giving you complete control over the browser version and APIs. The tradeoff is size (~150 MB+) and memory usage.
+
+native-window takes the opposite approach — it uses the OS-provided webview engine via wry, resulting in a < 1.5 MB native addon instead of a bundled browser. It is designed to be **embedded in existing scripts**, not to be an app framework. There is no main/renderer process split, no custom build toolchain, and no app shell. You `import` the package and create a window in a few lines.
+
+Choose Electron when you need full Chromium control, a mature plugin ecosystem, or comprehensive app packaging. Choose native-window when you want a lightweight webview window from an existing Bun/Deno/Node.js process without the framework overhead.
+
+## vs Tauri
+
+Tauri and native-window share the same underlying engine — both use [wry](https://github.com/tauri-apps/wry) + [tao](https://github.com/tauri-apps/tao) for cross-platform webview and window management.
+
+The key difference is scope. Tauri is a **full application framework** with a Rust backend, app scaffolding, bundling, auto-updates, system tray, and native menus. It expects you to structure your project around its conventions and build system.
+
+native-window is a **library**. It exposes wry/tao as a napi-rs addon that you can `import` from any Bun, Deno or Node.js script — no Rust knowledge required, no project scaffold, no build step beyond `npm install`. This makes it ideal for embedding webview windows in existing tools, plugins, CLI utilities, or automation scripts.
+
+Choose Tauri when you are building a standalone desktop application that will be distributed to end users. Choose native-window when you want to add a webview window to an existing Bun/Deno/Node.js process or script.
+
+## vs Neutralinojs
+
+Neutralinojs uses the OS webview and provides a lightweight runtime (~3 MB). Like Tauri, it is an app framework with its own CLI, project structure, and build pipeline. The backend communicates with the webview over a local WebSocket.
+
+native-window differs in that it runs inside your existing Bun/Deno/Node.js process as a native addon — there is no separate runtime binary or WebSocket bridge. IPC goes through wry's native message handler, and the optional typed IPC layer adds compile-time checked schemas with runtime validation.
+
+Choose Neutralinojs when you want a lightweight app framework with its own project structure. Choose native-window when you want to embed a webview directly in your Bun/Deno/Node.js code.
+
+## vs webview (Go/C)
+
+The [webview](https://github.com/webview/webview) library provides a minimal C/C++ (and Go) API for creating a single webview window. It is simple and small (~1 MB), but limited — single window only, no typed IPC, no event callbacks beyond basic message passing, and no schema validation.
+
+native-window provides multi-window support, a full event system (resize, move, focus, blur, page load, title change), typed IPC with schema validation, cookie access, security hardening (CSP, origin filtering, URL blocking), and a React hooks integration — all as a napi-rs addon for Bun/Deno/Node.js.
+
+Choose webview when you need the simplest possible single-window webview from Go or C. Choose native-window when you need a richer API from Bun/Deno/Node.js.
+
+## When to Choose native-window
+
+native-window is the right fit when:
+
+- You have an **existing Bun, Deno or Node.js process** and want to add a desktop window to it
+- You are building **developer tools, CLI companions, plugin UIs, or automation dashboards** — not a full consumer application
+- You want **typed, schema-validated IPC** between host and webview out of the box
+- You want to **avoid bundling Chromium** and keep your tool lightweight
+- You do not need app packaging, auto-updates, system tray, or native menus

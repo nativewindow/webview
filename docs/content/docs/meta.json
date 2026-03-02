@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "index",
+    "getting-started",
+    "use-cases",
+    "comparison",
+    "---API---",
+    "native-window",
+    "ipc",
+    "react",
+    "tsdb",
+    "---Guides---",
+    "security"
+  ]
+}
