@@ -5,7 +5,7 @@ import type { TypedChannel } from "@nativewindow/ipc";
 
 // ── Mock channel ──────────────────────────────────────────────────
 
-interface MockChannel extends TypedChannel<any> {
+interface MockChannel extends TypedChannel<any, any> {
   _listeners: Map<string, Set<(payload: any) => void>>;
   _simulateEvent: (type: string, payload: unknown) => void;
 }
@@ -60,7 +60,7 @@ import { createChannelClient } from "@nativewindow/ipc/client";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function createWrapper(schemas: Record<string, any>) {
+function createWrapper(schemas: { host: Record<string, any>; client: Record<string, any> }) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return createElement(ChannelProvider, { schemas, children });
   };
@@ -75,7 +75,7 @@ describe("ChannelProvider", () => {
   });
 
   test("creates channel client once on mount", () => {
-    const schemas = { ping: mockSchema };
+    const schemas = { host: { ping: mockSchema }, client: {} };
     const wrapper = createWrapper(schemas);
 
     const { rerender } = renderHook(() => useChannel(), { wrapper });
@@ -85,7 +85,7 @@ describe("ChannelProvider", () => {
   });
 
   test("passes schemas and onValidationError to createChannelClient", () => {
-    const schemas = { ping: mockSchema };
+    const schemas = { host: { ping: mockSchema }, client: {} };
     const onValidationError = vi.fn();
 
     function Wrapper({ children }: { children: ReactNode }) {
@@ -105,7 +105,7 @@ describe("ChannelProvider", () => {
   });
 
   test("provides stable channel reference across re-renders", () => {
-    const schemas = { ping: mockSchema };
+    const schemas = { host: { ping: mockSchema }, client: {} };
     const wrapper = createWrapper(schemas);
 
     const { result, rerender } = renderHook(() => useChannel(), { wrapper });
@@ -124,7 +124,7 @@ describe("useChannel", () => {
   });
 
   test("returns channel from context", () => {
-    const wrapper = createWrapper({ ping: mockSchema });
+    const wrapper = createWrapper({ host: { ping: mockSchema }, client: {} });
 
     const { result } = renderHook(() => useChannel(), { wrapper });
 
@@ -151,7 +151,7 @@ describe("useChannelEvent", () => {
 
   test("subscribes to event on mount", () => {
     const handler = vi.fn();
-    const wrapper = createWrapper({ ping: mockSchema });
+    const wrapper = createWrapper({ host: { ping: mockSchema }, client: {} });
 
     renderHook(() => useChannelEvent("ping", handler), { wrapper });
 
@@ -161,7 +161,7 @@ describe("useChannelEvent", () => {
 
   test("unsubscribes on unmount", () => {
     const handler = vi.fn();
-    const wrapper = createWrapper({ ping: mockSchema });
+    const wrapper = createWrapper({ host: { ping: mockSchema }, client: {} });
 
     const { unmount } = renderHook(() => useChannelEvent("ping", handler), { wrapper });
 
@@ -175,7 +175,7 @@ describe("useChannelEvent", () => {
   test("calls latest handler without re-subscribing", () => {
     const handler1 = vi.fn();
     const handler2 = vi.fn();
-    const wrapper = createWrapper({ ping: mockSchema });
+    const wrapper = createWrapper({ host: { ping: mockSchema }, client: {} });
 
     const { rerender } = renderHook(({ handler }) => useChannelEvent("ping", handler), {
       wrapper,
@@ -196,7 +196,7 @@ describe("useChannelEvent", () => {
 
   test("re-subscribes when event type changes", () => {
     const handler = vi.fn();
-    const wrapper = createWrapper({ ping: mockSchema, pong: mockSchema });
+    const wrapper = createWrapper({ host: { ping: mockSchema, pong: mockSchema }, client: {} });
 
     const { rerender } = renderHook(
       ({ type }: { type: string }) => useChannelEvent(type, handler),
@@ -211,7 +211,7 @@ describe("useChannelEvent", () => {
 
   test("delivers event payload to handler", () => {
     const handler = vi.fn();
-    const wrapper = createWrapper({ ping: mockSchema });
+    const wrapper = createWrapper({ host: { ping: mockSchema }, client: {} });
 
     renderHook(() => useChannelEvent("ping", handler), { wrapper });
 
@@ -228,7 +228,7 @@ describe("useSend", () => {
   });
 
   test("returns a stable function across re-renders", () => {
-    const wrapper = createWrapper({ ping: mockSchema });
+    const wrapper = createWrapper({ host: {}, client: { ping: mockSchema } });
 
     const { result, rerender } = renderHook(() => useSend(), { wrapper });
     const first = result.current;
@@ -239,7 +239,7 @@ describe("useSend", () => {
   });
 
   test("delegates to channel.send()", () => {
-    const wrapper = createWrapper({ ping: mockSchema });
+    const wrapper = createWrapper({ host: {}, client: { ping: mockSchema } });
 
     const { result } = renderHook(() => useSend(), { wrapper });
 
@@ -260,7 +260,7 @@ describe("createChannelHooks", () => {
   });
 
   test("creates typed hooks from schemas", () => {
-    const hooks = createChannelHooks({ ping: mockSchema, pong: mockSchema });
+    const hooks = createChannelHooks({ host: { ping: mockSchema, pong: mockSchema }, client: {} });
 
     expect(hooks.ChannelProvider).toBeTypeOf("function");
     expect(hooks.useChannel).toBeTypeOf("function");
@@ -269,7 +269,7 @@ describe("createChannelHooks", () => {
   });
 
   test("provider creates channel client once", () => {
-    const schemas = { ping: mockSchema };
+    const schemas = { host: { ping: mockSchema }, client: {} };
     const hooks = createChannelHooks(schemas);
 
     function Wrapper({ children }: { children: ReactNode }) {
@@ -289,7 +289,7 @@ describe("createChannelHooks", () => {
   });
 
   test("passes onValidationError option to createChannelClient", () => {
-    const schemas = { ping: mockSchema };
+    const schemas = { host: { ping: mockSchema }, client: {} };
     const onValidationError = vi.fn();
     const hooks = createChannelHooks(schemas, { onValidationError });
 
@@ -306,7 +306,7 @@ describe("createChannelHooks", () => {
   });
 
   test("useChannel returns channel from context", () => {
-    const hooks = createChannelHooks({ ping: mockSchema });
+    const hooks = createChannelHooks({ host: { ping: mockSchema }, client: {} });
 
     function Wrapper({ children }: { children: ReactNode }) {
       return createElement(hooks.ChannelProvider, { children });
@@ -320,7 +320,7 @@ describe("createChannelHooks", () => {
   });
 
   test("useChannel throws when used outside provider", () => {
-    const hooks = createChannelHooks({ ping: mockSchema });
+    const hooks = createChannelHooks({ host: { ping: mockSchema }, client: {} });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(() => {
@@ -333,7 +333,7 @@ describe("createChannelHooks", () => {
   });
 
   test("useChannelEvent subscribes and unsubscribes", () => {
-    const hooks = createChannelHooks({ ping: mockSchema });
+    const hooks = createChannelHooks({ host: { ping: mockSchema }, client: {} });
     const handler = vi.fn();
 
     function Wrapper({ children }: { children: ReactNode }) {
@@ -354,7 +354,7 @@ describe("createChannelHooks", () => {
   });
 
   test("useChannelEvent delivers payload to handler", () => {
-    const hooks = createChannelHooks({ ping: mockSchema });
+    const hooks = createChannelHooks({ host: { ping: mockSchema }, client: {} });
     const handler = vi.fn();
 
     function Wrapper({ children }: { children: ReactNode }) {
@@ -371,7 +371,7 @@ describe("createChannelHooks", () => {
   });
 
   test("useSend delegates to channel.send()", () => {
-    const hooks = createChannelHooks({ ping: mockSchema });
+    const hooks = createChannelHooks({ host: {}, client: { ping: mockSchema } });
 
     function Wrapper({ children }: { children: ReactNode }) {
       return createElement(hooks.ChannelProvider, { children });
@@ -389,7 +389,7 @@ describe("createChannelHooks", () => {
   });
 
   test("useSend returns a stable function across re-renders", () => {
-    const hooks = createChannelHooks({ ping: mockSchema });
+    const hooks = createChannelHooks({ host: {}, client: { ping: mockSchema } });
 
     function Wrapper({ children }: { children: ReactNode }) {
       return createElement(hooks.ChannelProvider, { children });
@@ -406,8 +406,8 @@ describe("createChannelHooks", () => {
   });
 
   test("each factory call creates independent contexts", () => {
-    const hooks1 = createChannelHooks({ ping: mockSchema });
-    const hooks2 = createChannelHooks({ pong: mockSchema });
+    const hooks1 = createChannelHooks({ host: { ping: mockSchema }, client: {} });
+    const hooks2 = createChannelHooks({ host: { pong: mockSchema }, client: {} });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     // hooks2.useChannel should throw even when hooks1's provider is present

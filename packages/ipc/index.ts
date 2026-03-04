@@ -116,18 +116,27 @@ export type SendArgs<T extends EventMap, K extends keyof T & string> = [T[K]] ex
   ? [type: K] | [type: K, payload: T[K]]
   : [type: K, payload: T[K]];
 
-/** Typed channel interface (shared shape for both host and webview sides). */
-export interface TypedChannel<T extends EventMap> {
-  /** Send a typed message. */
-  send<K extends keyof T & string>(...args: SendArgs<T, K>): void;
-  /** Register a handler for a typed message. */
-  on<K extends keyof T & string>(type: K, handler: (payload: T[K]) => void): void;
-  /** Remove a handler for a typed message. */
-  off<K extends keyof T & string>(type: K, handler: (payload: T[K]) => void): void;
+/**
+ * Typed channel interface with separate Send and Receive event maps.
+ * `Send` determines which events are available via `send()`, while
+ * `Receive` determines which events are available via `on()` / `off()`.
+ */
+export interface TypedChannel<Send extends EventMap, Receive extends EventMap> {
+  /** Send a typed message. Only events from the Send map are allowed. */
+  send<K extends keyof Send & string>(...args: SendArgs<Send, K>): void;
+  /** Register a handler for an incoming event. Only events from the Receive map are allowed. */
+  on<K extends keyof Receive & string>(type: K, handler: (payload: Receive[K]) => void): void;
+  /** Remove a handler for an incoming event. Only events from the Receive map are allowed. */
+  off<K extends keyof Receive & string>(type: K, handler: (payload: Receive[K]) => void): void;
 }
 
-/** Host-side channel wrapping a NativeWindow. */
-export interface NativeWindowChannel<T extends EventMap> extends TypedChannel<T> {
+/**
+ * Host-side channel wrapping a NativeWindow.
+ * The host sends events defined by the `host` schemas and receives
+ * events defined by the `client` schemas.
+ */
+export interface NativeWindowChannel<Send extends EventMap, Receive extends EventMap>
+  extends TypedChannel<Send, Receive> {
   /** The underlying NativeWindow instance. */
   readonly window: NativeWindow;
 }
@@ -135,20 +144,28 @@ export interface NativeWindowChannel<T extends EventMap> extends TypedChannel<T>
 /**
  * Options for {@link createChannel}.
  * The `schemas` field is required — it provides both TypeScript types
- * and runtime validation for each event.
+ * and runtime validation for each event direction.
  *
  * @example
  * ```ts
  * import { z } from "zod";
  * const ch = createChannel(win, {
- *   schemas: { ping: z.string(), pong: z.number() },
+ *   schemas: {
+ *     host: { "update-title": z.string() },
+ *     client: { "user-click": z.object({ x: z.number(), y: z.number() }) },
+ *   },
  * });
- * ch.send("ping", "hello"); // typed from schema
+ * ch.send("update-title", "Hello"); // only host events
+ * ch.on("user-click", (p) => {});   // only client events
  * ```
  */
-export interface ChannelOptions<S extends SchemaMap> {
-  /** Schemas for each event. Provides both TypeScript types and runtime validation. */
-  schemas: S;
+export interface ChannelOptions<H extends SchemaMap, C extends SchemaMap> {
+  /**
+   * Directional schemas for the channel.
+   * - `host`: events the host sends to the client.
+   * - `client`: events the client sends to the host.
+   */
+  schemas: { host: H; client: C };
   /** Inject the client script into the webview automatically. Default: true */
   injectClient?: boolean;
   /**
@@ -175,7 +192,10 @@ export interface ChannelOptions<S extends SchemaMap> {
    * @example
    * ```ts
    * createChannel(win, {
-   *   schemas: { ping: z.string() },
+   *   schemas: {
+   *     host: { ping: z.string() },
+   *     client: { pong: z.number() },
+   *   },
    *   trustedOrigins: ["https://myapp.com", "https://cdn.myapp.com"],
    * });
    * ```
@@ -372,6 +392,13 @@ try{Object.defineProperty(window,'__channel__',{value:Object.freeze(ch),writable
  * validation for each event. Compatible with Zod v4, Valibot v1, and
  * any schema library implementing the `safeParse()` interface.
  *
+ * The `schemas` option uses directional groups:
+ * - `host`: events the host sends to the client.
+ * - `client`: events the client sends to the host.
+ *
+ * On the returned channel, `send()` only accepts `host` event types and
+ * `on()`/`off()` only accept `client` event types.
+ *
  * @security **Origin restriction:** When `trustedOrigins` is configured,
  * both client script injection and incoming IPC messages are restricted to
  * pages whose URL origin matches the whitelist. The native `onMessage`
@@ -385,16 +412,19 @@ try{Object.defineProperty(window,'__channel__',{value:Object.freeze(ch),writable
  * import { createChannel } from "native-window-ipc";
  *
  * const ch = createChannel(win, {
- *   schemas: { ping: z.string(), pong: z.number() },
+ *   schemas: {
+ *     host: { "update-title": z.string() },
+ *     client: { "user-click": z.object({ x: z.number(), y: z.number() }) },
+ *   },
  * });
- * ch.send("ping", "hello");       // typed from schema
- * ch.on("pong", (n) => {});       // n: number
+ * ch.send("update-title", "Hello"); // only host events
+ * ch.on("user-click", (p) => {});   // only client events, p: { x: number; y: number }
  * ```
  */
-export function createChannel<S extends SchemaMap>(
+export function createChannel<H extends SchemaMap, C extends SchemaMap>(
   win: NativeWindow,
-  options: ChannelOptions<S>,
-): NativeWindowChannel<InferSchemaMap<S>> {
+  options: ChannelOptions<H, C>,
+): NativeWindowChannel<InferSchemaMap<H>, InferSchemaMap<C>> {
   const {
     schemas,
     injectClient = true,
@@ -405,6 +435,9 @@ export function createChannel<S extends SchemaMap>(
     maxListenersPerEvent,
     channelId: channelIdOpt,
   } = options;
+
+  const hostSchemas = schemas.host;
+  const clientSchemas = schemas.client;
 
   // Resolve channelId: true → cryptographically random nonce, string → as-is, undefined → ""
   const channelId =
@@ -462,11 +495,11 @@ export function createChannel<S extends SchemaMap>(
     const set = listeners.get(eventType);
     if (!set) return;
 
-    // Drop messages whose event type is not a known schema key (strict allowlist)
-    if (!(eventType in schemas)) return;
+    // Drop messages whose event type is not a known client schema key (strict allowlist)
+    if (!(eventType in clientSchemas)) return;
 
-    // Validate payload against the schema for this channel
-    const schema = schemas[eventType];
+    // Validate payload against the client schema for this channel
+    const schema = clientSchemas[eventType];
     let validatedPayload: unknown = env.p;
     if (schema) {
       const result = validatePayload(schema, env.p);
@@ -510,8 +543,8 @@ export function createChannel<S extends SchemaMap>(
   return {
     window: win,
 
-    send<K extends keyof InferSchemaMap<S> & string>(
-      ...args: SendArgs<InferSchemaMap<S>, K>
+    send<K extends keyof InferSchemaMap<H> & string>(
+      ...args: SendArgs<InferSchemaMap<H>, K>
     ): void {
       const [type, payload] = args;
       // Note: Outgoing payloads are not validated at runtime — only TypeScript
@@ -520,12 +553,12 @@ export function createChannel<S extends SchemaMap>(
       win.postMessage(encode(prefixCh(type), payload));
     },
 
-    on<K extends keyof InferSchemaMap<S> & string>(
+    on<K extends keyof InferSchemaMap<C> & string>(
       type: K,
-      handler: (payload: InferSchemaMap<S>[K]) => void,
+      handler: (payload: InferSchemaMap<C>[K]) => void,
     ): void {
       // Runtime schema key validation — reject unrecognized event types
-      if (!(type in schemas)) return;
+      if (!(type in clientSchemas)) return;
       let set = listeners.get(type);
       if (!set) {
         set = new Set();
@@ -535,9 +568,9 @@ export function createChannel<S extends SchemaMap>(
       set.add(handler as (payload: any) => void);
     },
 
-    off<K extends keyof InferSchemaMap<S> & string>(
+    off<K extends keyof InferSchemaMap<C> & string>(
       type: K,
-      handler: (payload: InferSchemaMap<S>[K]) => void,
+      handler: (payload: InferSchemaMap<C>[K]) => void,
     ): void {
       const set = listeners.get(type);
       if (set) set.delete(handler as (payload: any) => void);
@@ -557,16 +590,21 @@ export function createChannel<S extends SchemaMap>(
  *
  * const ch = createWindow(
  *   { title: "My App" },
- *   { schemas: { counter: z.number(), title: z.string() } },
+ *   {
+ *     schemas: {
+ *       host: { "update-title": z.string() },
+ *       client: { "user-click": z.object({ x: z.number(), y: z.number() }) },
+ *     },
+ *   },
  * );
- * ch.send("counter", 42); // typed from schema
- * ch.window.loadHtml("<html>...</html>");
+ * ch.send("update-title", "Hello"); // only host events
+ * ch.on("user-click", (p) => {});   // only client events
  * ```
  */
-export function createWindow<S extends SchemaMap>(
+export function createWindow<H extends SchemaMap, C extends SchemaMap>(
   windowOptions: WindowOptions | undefined,
-  channelOptions: ChannelOptions<S>,
-): NativeWindowChannel<InferSchemaMap<S>> {
+  channelOptions: ChannelOptions<H, C>,
+): NativeWindowChannel<InferSchemaMap<H>, InferSchemaMap<C>> {
   const win = new NativeWindow(windowOptions);
   return createChannel(win, channelOptions);
 }

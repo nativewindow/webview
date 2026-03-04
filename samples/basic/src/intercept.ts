@@ -10,7 +10,7 @@ const ch = createWindow(
   },
   {
     injectClient: false,
-    schemas: {},
+    schemas: { host: {}, client: {} },
     onValidationError: (type, payload) => {
       console.warn(`[Bun] Invalid "${type}" payload:`, payload);
     },

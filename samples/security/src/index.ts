@@ -30,17 +30,21 @@ const origin = loadHtmlOrigin();
 // ── Schemas ────────────────────────────────────────────────
 
 const schemas = {
-  /** Webview -> Host: user performed an action */
-  "user-action": z.object({
-    action: z.string().max(50),
-    timestamp: z.number(),
-  }),
-  /** Webview -> Host: request a cookie audit */
-  "request-cookies": z.literal(true),
-  /** Host -> Webview: status/feedback message */
-  status: z.string(),
-  /** Host -> Webview: cookie audit report */
-  "cookie-report": z.string(),
+  host: {
+    /** Host -> Webview: status/feedback message */
+    status: z.string(),
+    /** Host -> Webview: cookie audit report */
+    "cookie-report": z.string(),
+  },
+  client: {
+    /** Webview -> Host: user performed an action */
+    "user-action": z.object({
+      action: z.string().max(50),
+      timestamp: z.number(),
+    }),
+    /** Webview -> Host: request a cookie audit */
+    "request-cookies": z.literal(true),
+  },
 };
 
 // ── Window + Channel ───────────────────────────────────────

@@ -13,14 +13,18 @@ import { createWindow } from "@nativewindow/ipc";
 // Define schemas — types are inferred automatically.
 // In a real app, put these in a shared file (e.g. shared/schemas.ts).
 const schemas = {
-  /** Webview -> Bun: user clicked somewhere */
-  "user-click": z.object({ x: z.number(), y: z.number() }),
-  /** Webview -> Bun: counter incremented */
-  counter: z.number(),
-  /** Bun -> Webview: update the displayed title */
-  "update-title": z.string(),
-  /** Bun -> Webview: echo back the last message */
-  echo: z.string(),
+  host: {
+    /** Bun -> Webview: update the displayed title */
+    "update-title": z.string(),
+    /** Bun -> Webview: echo back the last message */
+    echo: z.string(),
+  },
+  client: {
+    /** Webview -> Bun: user clicked somewhere */
+    "user-click": z.object({ x: z.number(), y: z.number() }),
+    /** Webview -> Bun: counter incremented */
+    counter: z.number(),
+  },
 };
 
 // Create a typed channel window (init + event pump start automatically)
@@ -153,9 +157,9 @@ ch.on("counter", (n) => {
 });
 
 // These would be type errors (uncomment to see):
-// ch.send("counter", "wrong");      // string is not assignable to number
-// ch.send("typo", 123);             // "typo" does not exist in schemas
-// ch.on("counter", (s: string) => {}); // string is not assignable to number
+// ch.send("counter", 42);               // "counter" is a client event, not sendable by host
+// ch.send("typo", 123);                 // "typo" does not exist in schemas
+// ch.on("update-title", (t) => {});     // "update-title" is a host event, not receivable by host
 
 ch.window.onClose(() => {
   console.log("[Bun] Window closed");

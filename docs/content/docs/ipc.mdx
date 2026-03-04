@@ -17,24 +17,28 @@ The package is pure TypeScript with zero runtime dependencies. It works with bot
 
 ## Schema-First Approach
 
-Define schemas for your events. Types are inferred automatically — no separate type definition needed:
+Define directional schemas for your events. Types are inferred automatically — no separate type definition needed:
 
 ```ts
 import { z } from "zod";
 
 const schemas = {
-  /** Webview -> Host: user clicked somewhere */
-  "user-click": z.object({ x: z.number(), y: z.number() }),
-  /** Webview -> Host: counter value */
-  counter: z.number(),
-  /** Host -> Webview: update the title */
-  "update-title": z.string(),
-  /** Host -> Webview: echo a message */
-  echo: z.string(),
+  host: {
+    /** Host -> Webview: update the title */
+    "update-title": z.string(),
+    /** Host -> Webview: echo a message */
+    echo: z.string(),
+  },
+  client: {
+    /** Webview -> Host: user clicked somewhere */
+    "user-click": z.object({ x: z.number(), y: z.number() }),
+    /** Webview -> Host: counter value */
+    counter: z.number(),
+  },
 };
 ```
 
-Schemas serve as the single source of truth for both types and validation.
+Schemas serve as the single source of truth for both types and validation. The `host` key defines events the host sends to the webview, while `client` defines events the webview sends to the host.
 
 ## Host Side
 
@@ -47,19 +51,23 @@ import { z } from "zod";
 import { createWindow } from "@nativewindow/ipc";
 
 const schemas = {
-  "user-click": z.object({ x: z.number(), y: z.number() }),
-  counter: z.number(),
-  "update-title": z.string(),
-  echo: z.string(),
+  host: {
+    "update-title": z.string(),
+    echo: z.string(),
+  },
+  client: {
+    "user-click": z.object({ x: z.number(), y: z.number() }),
+    counter: z.number(),
+  },
 };
 
 const ch = createWindow({ title: "My App", width: 800, height: 600 }, { schemas });
 
-// Send typed messages to the webview
+// Send typed messages to the webview (host events)
 ch.send("update-title", "Hello!"); // payload must be string
 ch.send("echo", "Welcome"); // payload must be string
 
-// Receive typed messages from the webview
+// Receive typed messages from the webview (client events)
 ch.on("user-click", (pos) => {
   // pos: { x: number; y: number }
   console.log(`Click at ${pos.x}, ${pos.y}`);
@@ -78,9 +86,9 @@ ch.window.onClose(() => process.exit(0));
 Type errors are caught at compile time:
 
 ```ts
-ch.send("counter", "wrong"); // Type error: string not assignable to number
-ch.send("typo", 123); // Type error: "typo" does not exist
-ch.on("counter", (s: string) => {}); // Type error: string not assignable to number
+ch.send("counter", 42); // Type error: "counter" is a client event, not sendable by host
+ch.send("typo", 123); // Type error: "typo" does not exist in host schemas
+ch.on("update-title", (t) => {}); // Type error: "update-title" is a host event, not receivable by host
 ```
 
 ### `createChannel`
@@ -95,30 +103,32 @@ import { createChannel } from "@nativewindow/ipc";
 const win = new NativeWindow({ title: "App" });
 const ch = createChannel(win, {
   schemas: {
-    ping: z.string(),
-    pong: z.number(),
+    host: { ping: z.string() },
+    client: { pong: z.number() },
   },
 });
 
-ch.send("ping", "hello"); // typed as string
-ch.on("pong", (n) => {}); // n: number
+ch.send("ping", "hello"); // typed as string (host event)
+ch.on("pong", (n) => {}); // n: number (client event)
 ```
 
 ### `TypedChannel` Interface
 
-Both `createChannel` and `createWindow` return an object implementing `TypedChannel<T>`:
+Both `createChannel` and `createWindow` return an object implementing `TypedChannel<Send, Receive>`:
 
 ```ts
-interface TypedChannel<T extends EventMap> {
-  send<K extends keyof T & string>(...args: SendArgs<T, K>): void;
-  on<K extends keyof T & string>(type: K, handler: (payload: T[K]) => void): void;
-  off<K extends keyof T & string>(type: K, handler: (payload: T[K]) => void): void;
+interface TypedChannel<Send extends EventMap, Receive extends EventMap> {
+  send<K extends keyof Send & string>(...args: SendArgs<Send, K>): void;
+  on<K extends keyof Receive & string>(type: K, handler: (payload: Receive[K]) => void): void;
+  off<K extends keyof Receive & string>(type: K, handler: (payload: Receive[K]) => void): void;
 }
 ```
 
+The `Send` type parameter defines events this side can send, while `Receive` defines events this side can listen for. On the host, `Send` maps to `host` schemas and `Receive` maps to `client` schemas; on the webview side, the mapping is flipped.
+
 The `send()` method uses the `SendArgs` helper type: when the payload type for an event is `void` or `never`, the payload argument is optional — you can write `ch.send("ping")` instead of `ch.send("ping", undefined)`.
 
-The `NativeWindowChannel<T>` returned by `createChannel`/`createWindow` extends this with a `readonly window` property.
+The `NativeWindowChannel<Send, Receive>` returned by `createChannel`/`createWindow` extends this with a `readonly window` property.
 
 ## Webview Side
 
@@ -158,14 +168,14 @@ import { createChannelClient } from "@nativewindow/ipc/client";
 
 const ch = createChannelClient({
   schemas: {
-    "update-title": z.string(),
-    echo: z.string(),
+    host: { "update-title": z.string(), echo: z.string() },
+    client: { "user-click": z.object({ x: z.number(), y: z.number() }), counter: z.number() },
   },
 });
 
 // Fully typed on the webview side too
 ch.on("update-title", (title) => {
-  // title: string
+  // title: string (host event — received by client)
   document.title = title;
 });
 ```
@@ -178,7 +188,7 @@ ch.on("update-title", (title) => {
 
 | Option              | Type                      | Default        | Description                                                         |
 | ------------------- | ------------------------- | -------------- | ------------------------------------------------------------------- |
-| `schemas`           | `SchemaMap`               | **(required)** | Schemas for incoming events — provides types and runtime validation |
+| `schemas`           | `{ host: SchemaMap; client: SchemaMap }` | **(required)** | Directional schemas — `host` events are validated on receive, `client` events provide types for send |
 | `onValidationError` | `(type, payload) => void` | —              | Called when an incoming payload fails validation                    |
 
 ### Manual Injection
@@ -205,7 +215,10 @@ Pass options as the second argument to `createChannel` or `createWindow`:
 
 ```ts
 const ch = createChannel(win, {
-  schemas: { ping: z.string(), pong: z.number() },
+  schemas: {
+    host: { ping: z.string() },
+    client: { pong: z.number() },
+  },
   injectClient: true,
   onValidationError: (type, payload) => {
     /* ... */
@@ -218,7 +231,7 @@ const ch = createChannel(win, {
 
 | Option                 | Type                      | Default        | Description                                                                                                                                                                               |
 | ---------------------- | ------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schemas`              | `SchemaMap`               | **(required)** | Schemas for runtime validation + type inference                                                                                                                                           |
+| `schemas`              | `{ host: SchemaMap; client: SchemaMap }` | **(required)** | Directional schemas — `host` for events the host sends, `client` for events the webview sends                                                                                            |
 | `injectClient`         | `boolean`                 | `true`         | Auto-inject the client script into the webview                                                                                                                                            |
 | `onValidationError`    | `(type, payload) => void` | —              | Called when a payload fails validation                                                                                                                                                    |
 | `trustedOrigins`       | `string[]`                | —              | Restrict client script injection and incoming messages to these origins                                                                                                                   |
@@ -248,9 +261,12 @@ When a message arrives, the channel looks up the schema for the event name and c
 ```ts
 const ch = createChannel(win, {
   schemas: {
-    "user-click": z.object({ x: z.number(), y: z.number() }),
-    counter: z.number().finite(),
-    message: z.string().max(1024),
+    host: { echo: z.string() },
+    client: {
+      "user-click": z.object({ x: z.number(), y: z.number() }),
+      counter: z.number().finite(),
+      message: z.string().max(1024),
+    },
   },
   onValidationError: (type, payload) => {
     console.warn(`Rejected invalid "${type}" payload:`, payload);
@@ -272,7 +288,10 @@ When navigating to external URLs, you may want to restrict where the IPC client 
 
 ```ts
 const ch = createChannel(win, {
-  schemas: { ping: z.string() },
+  schemas: {
+    host: { status: z.string() },
+    client: { ping: z.string() },
+  },
   trustedOrigins: ["https://myapp.com", "https://cdn.myapp.com"],
 });
 ```

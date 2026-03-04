@@ -20,15 +20,19 @@ import { z } from "zod";
 import { createWindow } from "@nativewindow/ipc";
 
 const schemas = {
-  /** Webview -> Host: simple ping */
-  ping: z.string().max(100),
-  /** Webview -> Host: structured user data */
-  "user-data": z.object({
-    name: z.string().min(1).max(50),
-    age: z.number().int().positive(),
-  }),
-  /** Host -> Webview: feedback message */
-  feedback: z.string(),
+  host: {
+    /** Host -> Webview: feedback message */
+    feedback: z.string(),
+  },
+  client: {
+    /** Webview -> Host: simple ping */
+    ping: z.string().max(100),
+    /** Webview -> Host: structured user data */
+    "user-data": z.object({
+      name: z.string().min(1).max(50),
+      age: z.number().int().positive(),
+    }),
+  },
 };
 
 const ch = createWindow(

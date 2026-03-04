@@ -89,9 +89,15 @@ const pointSchema = mockSchema(
 );
 
 const testSchemas = {
-  ping: stringSchema,
-  pong: numberSchema,
-  data: pointSchema,
+  host: {
+    ping: stringSchema,
+    data: pointSchema,
+  },
+  client: {
+    ping: stringSchema,
+    pong: numberSchema,
+    data: pointSchema,
+  },
 };
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -408,7 +414,7 @@ describe("schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const received: string[] = [];
@@ -422,7 +428,7 @@ describe("schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const received: string[] = [];
@@ -438,7 +444,7 @@ describe("schema validation", () => {
     // Only define schema for "ping", not "pong"
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema, pong: numberSchema },
+      schemas: { host: {}, client: { ping: stringSchema, pong: numberSchema } },
     });
 
     // Send to an event not in schemas (simulated via raw envelope)
@@ -453,7 +459,7 @@ describe("schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const received: unknown[] = [];
@@ -469,7 +475,7 @@ describe("schema validation", () => {
     const errors: { type: string; payload: unknown }[] = [];
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
       onValidationError: (type, payload) => errors.push({ type, payload }),
     });
 
@@ -483,7 +489,7 @@ describe("schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
       maxMessageSize: 50,
     });
 
@@ -501,7 +507,7 @@ describe("schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: pointSchema },
+      schemas: { host: {}, client: { ping: pointSchema } },
     });
 
     const received: any[] = [];
@@ -520,7 +526,7 @@ describe("schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const received: string[] = [];
@@ -762,7 +768,7 @@ describe("Zod schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: z.string(), pong: z.number() },
+      schemas: { host: {}, client: { ping: z.string(), pong: z.number() } },
     });
 
     const received: string[] = [];
@@ -776,7 +782,7 @@ describe("Zod schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: z.string() },
+      schemas: { host: {}, client: { ping: z.string() } },
     });
 
     const received: string[] = [];
@@ -791,7 +797,7 @@ describe("Zod schema validation", () => {
     const errors: { type: string; payload: unknown }[] = [];
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: z.string() },
+      schemas: { host: {}, client: { ping: z.string() } },
       onValidationError: (type, payload) => errors.push({ type, payload }),
     });
 
@@ -806,7 +812,8 @@ describe("Zod schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        data: z.object({ x: z.number(), y: z.number() }),
+        host: {},
+        client: { data: z.object({ x: z.number(), y: z.number() }) },
       },
     });
 
@@ -827,9 +834,12 @@ describe("Zod schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: z.string(),
-        pong: z.number(),
-        data: z.object({ x: z.number(), y: z.number() }),
+        host: {
+          ping: z.string(),
+          pong: z.number(),
+          data: z.object({ x: z.number(), y: z.number() }),
+        },
+        client: {},
       },
     });
 
@@ -851,8 +861,8 @@ describe("Zod schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: z.string(),
-        pong: z.number(),
+        host: {},
+        client: { ping: z.string(), pong: z.number() },
       },
     });
 
@@ -900,8 +910,11 @@ describe("Valibot schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: valibotAdapter(v.string()),
-        pong: valibotAdapter(v.number()),
+        host: {},
+        client: {
+          ping: valibotAdapter(v.string()),
+          pong: valibotAdapter(v.number()),
+        },
       },
     });
 
@@ -916,7 +929,7 @@ describe("Valibot schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: valibotAdapter(v.string()) },
+      schemas: { host: {}, client: { ping: valibotAdapter(v.string()) } },
     });
 
     const received: string[] = [];
@@ -931,7 +944,7 @@ describe("Valibot schema validation", () => {
     const errors: { type: string; payload: unknown }[] = [];
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: valibotAdapter(v.string()) },
+      schemas: { host: {}, client: { ping: valibotAdapter(v.string()) } },
       onValidationError: (type, payload) => errors.push({ type, payload }),
     });
 
@@ -946,7 +959,8 @@ describe("Valibot schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        data: valibotAdapter(v.object({ x: v.number(), y: v.number() })),
+        host: {},
+        client: { data: valibotAdapter(v.object({ x: v.number(), y: v.number() })) },
       },
     });
 
@@ -967,9 +981,12 @@ describe("Valibot schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: valibotAdapter(v.string()),
-        pong: valibotAdapter(v.number()),
-        data: valibotAdapter(v.object({ x: v.number(), y: v.number() })),
+        host: {
+          ping: valibotAdapter(v.string()),
+          pong: valibotAdapter(v.number()),
+          data: valibotAdapter(v.object({ x: v.number(), y: v.number() })),
+        },
+        client: {},
       },
     });
 
@@ -991,8 +1008,11 @@ describe("Valibot schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: valibotAdapter(v.string()),
-        pong: valibotAdapter(v.number()),
+        host: {},
+        client: {
+          ping: valibotAdapter(v.string()),
+          pong: valibotAdapter(v.number()),
+        },
       },
     });
 
@@ -1040,8 +1060,11 @@ describe("ArkType schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: arktypeAdapter(type("string")),
-        pong: arktypeAdapter(type("number")),
+        host: {},
+        client: {
+          ping: arktypeAdapter(type("string")),
+          pong: arktypeAdapter(type("number")),
+        },
       },
     });
 
@@ -1056,7 +1079,7 @@ describe("ArkType schema validation", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: arktypeAdapter(type("string")) },
+      schemas: { host: {}, client: { ping: arktypeAdapter(type("string")) } },
     });
 
     const received: string[] = [];
@@ -1071,7 +1094,7 @@ describe("ArkType schema validation", () => {
     const errors: { type: string; payload: unknown }[] = [];
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: arktypeAdapter(type("string")) },
+      schemas: { host: {}, client: { ping: arktypeAdapter(type("string")) } },
       onValidationError: (tp, payload) => errors.push({ type: tp, payload }),
     });
 
@@ -1086,7 +1109,8 @@ describe("ArkType schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        data: arktypeAdapter(type({ x: "number", y: "number" })),
+        host: {},
+        client: { data: arktypeAdapter(type({ x: "number", y: "number" })) },
       },
     });
 
@@ -1107,9 +1131,12 @@ describe("ArkType schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: arktypeAdapter(type("string")),
-        pong: arktypeAdapter(type("number")),
-        data: arktypeAdapter(type({ x: "number", y: "number" })),
+        host: {
+          ping: arktypeAdapter(type("string")),
+          pong: arktypeAdapter(type("number")),
+          data: arktypeAdapter(type({ x: "number", y: "number" })),
+        },
+        client: {},
       },
     });
 
@@ -1131,8 +1158,11 @@ describe("ArkType schema validation", () => {
     const ch = createChannel(win as any, {
       injectClient: false,
       schemas: {
-        ping: arktypeAdapter(type("string")),
-        pong: arktypeAdapter(type("number")),
+        host: {},
+        client: {
+          ping: arktypeAdapter(type("string")),
+          pong: arktypeAdapter(type("number")),
+        },
       },
     });
 
@@ -1163,7 +1193,7 @@ describe("void payload", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: voidSchema, pong: numberSchema },
+      schemas: { host: { ping: voidSchema, pong: numberSchema }, client: {} },
     });
 
     // void event — omit payload
@@ -1178,7 +1208,7 @@ describe("void payload", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: voidSchema },
+      schemas: { host: { ping: voidSchema }, client: {} },
     });
 
     // void event — explicit undefined payload
@@ -1193,7 +1223,7 @@ describe("void payload", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { pong: numberSchema },
+      schemas: { host: { pong: numberSchema }, client: {} },
     });
 
     ch.send("pong", 42);
@@ -1207,7 +1237,7 @@ describe("void payload", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: voidSchema },
+      schemas: { host: {}, client: { ping: voidSchema } },
     });
 
     const calls: unknown[] = [];
@@ -1231,7 +1261,7 @@ describe("channelId namespace", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: { ping: stringSchema }, client: {} },
       channelId: "ns1",
     });
 
@@ -1246,7 +1276,7 @@ describe("channelId namespace", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
       channelId: "ns1",
     });
 
@@ -1266,7 +1296,7 @@ describe("channelId namespace", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
       channelId: "ns1",
     });
 
@@ -1281,7 +1311,7 @@ describe("channelId namespace", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: { ping: stringSchema }, client: {} },
       channelId: true,
     });
 
@@ -1297,7 +1327,7 @@ describe("channelId namespace", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: { ping: stringSchema }, client: {} },
     });
 
     ch.send("ping", "hello");
@@ -1310,7 +1340,7 @@ describe("channelId namespace", () => {
     const win = createMockWindow();
     createChannel(win as any, {
       injectClient: true,
-      schemas: { ping: stringSchema },
+      schemas: { host: { ping: stringSchema }, client: {} },
       channelId: "myns",
     });
 
@@ -1373,7 +1403,7 @@ describe("schema transform support", () => {
     };
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: transformSchema },
+      schemas: { host: {}, client: { ping: transformSchema } },
     });
 
     const received: unknown[] = [];
@@ -1387,7 +1417,7 @@ describe("schema transform support", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const received: unknown[] = [];
@@ -1405,7 +1435,7 @@ describe("rate limiting", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
       rateLimit: 3,
     });
 
@@ -1425,7 +1455,7 @@ describe("rate limiting", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const received: string[] = [];
@@ -1442,7 +1472,7 @@ describe("rate limiting", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
       rateLimit: 0,
     });
 
@@ -1461,7 +1491,7 @@ describe("listener limits", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const received: unknown[] = [];
@@ -1476,7 +1506,7 @@ describe("listener limits", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
       maxListenersPerEvent: 2,
     });
 
@@ -1493,7 +1523,7 @@ describe("listener limits", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema, pong: numberSchema },
+      schemas: { host: {}, client: { ping: stringSchema, pong: numberSchema } },
       maxListenersPerEvent: 1,
     });
 
@@ -1513,7 +1543,7 @@ describe("listener limits", () => {
     const win = createMockWindow();
     const ch = createChannel(win as any, {
       injectClient: false,
-      schemas: { ping: stringSchema },
+      schemas: { host: {}, client: { ping: stringSchema } },
     });
 
     const calls: number[] = [];

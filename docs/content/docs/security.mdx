@@ -194,7 +194,7 @@ TypeScript types provide compile-time safety on the host side, but they are eras
 
 ```ts
 // Your schema says counter is a number...
-const schemas = { counter: z.number() };
+const schemas = { client: { counter: z.number() }, host: {} };
 
 // ...but the webview can send anything
 __channel__.send("counter", "not a number");
@@ -213,9 +213,12 @@ import { createChannel } from "@nativewindow/ipc";
 
 const ch = createChannel(win, {
   schemas: {
-    "user-click": z.object({ x: z.number(), y: z.number() }),
-    counter: z.number().finite(),
-    message: z.string().max(1024),
+    host: { echo: z.string() },
+    client: {
+      "user-click": z.object({ x: z.number(), y: z.number() }),
+      counter: z.number().finite(),
+      message: z.string().max(1024),
+    },
   },
   onValidationError: (type, payload) => {
     console.warn(`Rejected invalid "${type}" payload:`, payload);
@@ -242,7 +245,7 @@ This means:
 - **Typed channels do not replace validation** — they provide ergonomic type safety for development, not a security boundary
 - **Schema validation catches malformed payloads** — all incoming messages are validated against the schemas before reaching your handlers
 - **Non-envelope messages are ignored** — the typed channel only dispatches messages matching the `{ $ch, p }` envelope format
-- **Strict event allowlist** — messages with a `$ch` value that does not match any key in the schemas map are silently dropped, even if a handler was somehow registered for that type
+- **Strict event allowlist** — messages with a `$ch` value that does not match any key in the receiving side's schemas are silently dropped, even if a handler was somehow registered for that type
 
 ### IPC Bridge Hardening
 
@@ -274,7 +277,7 @@ At the IPC layer, a configurable `maxMessageSize` option (default: **1 MB**) is 
 
 ```ts
 const ch = createChannel(win, {
-  schemas: { ping: z.string() },
+  schemas: { host: {}, client: { ping: z.string() } },
   maxMessageSize: 512_000, // 512 KB
 });
 ```
@@ -287,7 +290,7 @@ The `rateLimit` option in `ChannelOptions` limits how many incoming IPC messages
 
 ```ts
 const ch = createChannel(win, {
-  schemas: { ping: z.string() },
+  schemas: { host: {}, client: { ping: z.string() } },
   rateLimit: 100, // max 100 messages per second
 });
 ```
@@ -302,7 +305,7 @@ The `channelId` option in `ChannelOptions` adds a namespace prefix to all `$ch` 
 
 ```ts
 const ch = createChannel(win, {
-  schemas: { ping: z.string() },
+  schemas: { host: {}, client: { ping: z.string() } },
   channelId: true, // auto-generate a random 8-character nonce
 });
 ```
@@ -322,7 +325,7 @@ When loading external URLs, you can restrict which pages receive the IPC client 
 
 ```ts
 const ch = createChannel(win, {
-  schemas: { ping: z.string() },
+  schemas: { host: { status: z.string() }, client: { ping: z.string() } },
   trustedOrigins: ["https://myapp.com"],
 });
 ```

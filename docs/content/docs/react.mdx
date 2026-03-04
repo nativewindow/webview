@@ -45,10 +45,14 @@ import { z } from "zod";
 import { createChannelHooks } from "@nativewindow/react";
 
 export const { ChannelProvider, useChannel, useChannelEvent, useSend } = createChannelHooks({
-  /** Host -> Webview: update the displayed title */
-  "update-title": z.string(),
-  /** Webview -> Host: user clicked a button */
-  counter: z.number(),
+  host: {
+    /** Host -> Webview: update the displayed title */
+    "update-title": z.string(),
+  },
+  client: {
+    /** Webview -> Host: user clicked a button */
+    counter: z.number(),
+  },
 });
 ```
 
@@ -76,7 +80,7 @@ function Counter() {
   const send = useSend();
 
   useChannelEvent("update-title", (title) => {
-    // title is inferred as string
+    // title is inferred as string (host event)
     document.title = title;
   });
 
@@ -162,19 +166,23 @@ A complete React webview app using `createChannelHooks`:
 import { z } from "zod";
 
 export const schemas = {
-  "update-title": z.string(),
-  "show-notification": z.object({
-    message: z.string(),
-    level: z.enum(["info", "warn", "error"]),
-  }),
-  counter: z.number(),
-  "user-action": z.string(),
+  host: {
+    "update-title": z.string(),
+    "show-notification": z.object({
+      message: z.string(),
+      level: z.enum(["info", "warn", "error"]),
+    }),
+  },
+  client: {
+    counter: z.number(),
+    "user-action": z.string(),
+  },
 };
 ```
 
 ```ts
 // channel.ts
-import { createChannelHooks } from "@nativewindow/ipc";
+import { createChannelHooks } from "@nativewindow/react";
 import { schemas } from "./schemas";
 
 export const { ChannelProvider, useChannelEvent, useSend } = createChannelHooks(schemas);
@@ -232,9 +240,11 @@ const ch = createWindow({ title: "My App", width: 800, height: 600 }, { schemas 
 
 ch.window.loadUrl("http://localhost:5173"); // Vite dev server
 
+// Host receives client events
 ch.on("counter", (n) => console.log("Counter:", n));
 ch.on("user-action", (action) => console.log("Action:", action));
 
+// Host sends host events
 ch.send("update-title", "Hello from host!");
 ch.send("show-notification", {
   message: "Connected to host",
@@ -251,15 +261,16 @@ import { z } from "zod";
 import { ChannelProvider, useChannel, useChannelEvent, useSend } from "@nativewindow/react";
 
 const schemas = {
-  counter: z.number(),
-  title: z.string(),
+  host: { title: z.string() },
+  client: { counter: z.number() },
 };
 
-type Events = { counter: number; title: string };
+type SendEvents = { counter: number };
+type ReceiveEvents = { title: string };
 
 function App() {
-  const send = useSend<Events>();
-  useChannelEvent<Events, "title">("title", (t) => {
+  const send = useSend<SendEvents>();
+  useChannelEvent<ReceiveEvents, "title">("title", (t) => {
     document.title = t;
   });
   return <button onClick={() => send("counter", 1)}>+1</button>;
@@ -278,7 +289,7 @@ The standalone `ChannelProvider` accepts `schemas` and `onValidationError` as pr
 
 | Prop                | Type                      | Default        | Description                                       |
 | ------------------- | ------------------------- | -------------- | ------------------------------------------------- |
-| `schemas`           | `SchemaMap`               | **(required)** | Schemas for runtime validation and type inference |
+| `schemas`           | `{ host: SchemaMap; client: SchemaMap }` | **(required)** | Directional schemas for runtime validation and type inference |
 | `onValidationError` | `(type, payload) => void` | —              | Called when an incoming payload fails validation  |
 | `children`          | `ReactNode`               | **(required)** | React children                                    |
 
@@ -290,11 +301,11 @@ The standalone `ChannelProvider` accepts `schemas` and `onValidationError` as pr
 | --------------------------------------- | --------- | ----------------------------------------------------------------------------- |
 | `createChannelHooks(schemas, options?)` | Factory   | Returns pre-typed `{ ChannelProvider, useChannel, useChannelEvent, useSend }` |
 | `ChannelProvider`                       | Component | Standalone context provider (requires `schemas` prop)                         |
-| `ChannelProviderProps<S>`               | Type      | Props interface for the standalone provider                                   |
-| `useChannel<T>()`                       | Hook      | Standalone: access the typed channel from context                             |
-| `useChannelEvent<T, K>(type, handler)`  | Hook      | Standalone: subscribe to events with automatic cleanup                        |
-| `useSend<T>()`                          | Hook      | Standalone: stable `send` function                                            |
-| `TypedChannelHooks<T>`                  | Type      | Return type of `createChannelHooks`                                           |
+| `ChannelProviderProps<H, C>`              | Type      | Props interface for the standalone provider                                   |
+| `useChannel<Send, Receive>()`             | Hook      | Standalone: access the typed channel from context                             |
+| `useChannelEvent<Receive, K>(type, handler)` | Hook   | Standalone: subscribe to incoming events with automatic cleanup               |
+| `useSend<Send>()`                         | Hook      | Standalone: stable `send` function                                            |
+| `TypedChannelHooks<Send, Receive>`        | Type      | Return type of `createChannelHooks`                                           |
 | `ChannelHooksOptions`                   | Type      | Options for `createChannelHooks`                                              |
 
 ### Type Re-exports
