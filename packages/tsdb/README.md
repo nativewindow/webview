@@ -2,8 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/@nativewindow/tsdb)](https://www.npmjs.com/package/@nativewindow/tsdb)
 
-> [!WARNING]
-> This project is in **alpha**. APIs may change without notice.
+> [!NOTE]
+> This project is in **beta**. APIs may change without notice.
 
 [TanStack DB](https://tanstack.com/db) collection adapter for [native-window](https://github.com/nativewindow/webview) IPC. Sync data between the host process and webview collections over the native IPC bridge.
 

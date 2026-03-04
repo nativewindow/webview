@@ -1,7 +1,7 @@
 {
   "name": "@nativewindow/react",
-  "version": "1.0.0",
-  "description": "React bindings for native-window IPC (alpha)",
+  "version": "1.0.1",
+  "description": "React bindings for native-window IPC (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {
     "url": "https://github.com/nativewindow/webview/issues"

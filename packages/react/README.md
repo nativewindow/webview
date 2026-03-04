@@ -2,8 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/@nativewindow/react)](https://www.npmjs.com/package/@nativewindow/react)
 
-> [!WARNING]
-> This project is in **alpha**. APIs may change without notice.
+> [!NOTE]
+> This project is in **beta**. APIs may change without notice.
 
 React hooks for [native-window-ipc](https://github.com/nativewindow/webview/tree/main/packages/ipc). Provides type-safe React bindings for the webview side of the IPC channel.
 
@@ -32,9 +32,11 @@ import { z } from "zod";
 import { createChannelHooks } from "@nativewindow/react";
 
 export const { ChannelProvider, useChannel, useChannelEvent, useSend } = createChannelHooks({
-  schemas: {
-    counter: z.number(),
+  host: {
     "update-title": z.string(),
+  },
+  client: {
+    counter: z.number(),
   },
 });
 ```
@@ -64,11 +66,12 @@ function Counter() {
   const [count, setCount] = useState(0);
   const send = useSend();
 
-  // Subscribe to events with automatic cleanup
-  useChannelEvent("counter", (n) => {
-    setCount(n);
+  // Subscribe to host events with automatic cleanup
+  useChannelEvent("update-title", (title) => {
+    document.title = title;
   });
 
+  // Send client events to the host
   return <button onClick={() => send("counter", count + 1)}>Count: {count}</button>;
 }
 ```

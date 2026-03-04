@@ -2,8 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/@nativewindow/ipc)](https://www.npmjs.com/package/@nativewindow/ipc)
 
-> [!WARNING]
-> This project is in **alpha**. APIs may change without notice.
+> [!NOTE]
+> This project is in **beta**. APIs may change without notice.
 
 Pure TypeScript typesafe IPC channel layer for [native-window](https://github.com/nativewindow/webview). Schema-based validation with compile-time checked event maps.
 
@@ -25,13 +25,18 @@ const ch = createWindow(
   { title: "Typed IPC" },
   {
     schemas: {
-      "user-click": z.object({ x: z.number(), y: z.number() }),
-      "update-title": z.string(),
-      counter: z.number(),
+      host: {
+        "update-title": z.string(),
+      },
+      client: {
+        "user-click": z.object({ x: z.number(), y: z.number() }),
+        counter: z.number(),
+      },
     },
   },
 );
 
+// Receive typed messages from the webview (client events)
 ch.on("user-click", (pos) => {
   // pos: { x: number; y: number }
   console.log(`Click at ${pos.x}, ${pos.y}`);
@@ -42,8 +47,8 @@ ch.on("counter", (n) => {
   ch.send("update-title", `Count: ${n}`);
 });
 
-// ch.send("counter", "wrong");      // Type error!
-// ch.send("typo", 123);             // Type error!
+// ch.send("counter", "wrong");      // Type error: "counter" is a client event
+// ch.send("typo", 123);             // Type error: "typo" does not exist
 
 ch.window.loadHtml(`<html>...</html>`);
 ```
@@ -71,12 +76,19 @@ import { createChannelClient } from "@nativewindow/ipc/client";
 
 const ch = createChannelClient({
   schemas: {
-    counter: z.number(),
-    "update-title": z.string(),
+    host: {
+      "update-title": z.string(),
+    },
+    client: {
+      counter: z.number(),
+    },
   },
 });
 
+// Send client events to the host
 ch.send("counter", 42); // Typed!
+
+// Receive host events from the host
 ch.on("update-title", (t) => {
   // t: string
   document.title = t;
@@ -105,7 +117,7 @@ Create a typed channel client inside the webview for use in bundled apps.
 
 | Option                 | Type        | Default    | Description                            |
 | ---------------------- | ----------- | ---------- | -------------------------------------- |
-| `schemas`              | `SchemaMap` | _required_ | Schema definitions for each event type |
+| `schemas`              | `{ host: SchemaMap; client: SchemaMap }` | _required_ | Directional schemas — `host` for events the host sends, `client` for events the webview sends |
 | `injectClient`         | `boolean`   | `true`     | Auto-inject client script into webview |
 | `onValidationError`    | `function`  | —          | Called when a payload fails validation |
 | `trustedOrigins`       | `string[]`  | —          | Restrict IPC to specific origins       |

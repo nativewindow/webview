@@ -10,8 +10,8 @@
 [![npm](https://img.shields.io/npm/v/@nativewindow/react?label=native-window-ipc-react)](https://www.npmjs.com/package/@nativewindow/react)
 [![npm](https://img.shields.io/npm/v/@nativewindow/tsdb?label=native-window-tsdb)](https://www.npmjs.com/package/@nativewindow/tsdb)
 
-> [!WARNING]
-> This project is in **alpha**. APIs may change without notice and some features may be incomplete or unstable.
+> [!NOTE]
+> This project is in **beta**. APIs may change without notice and some features may be incomplete or unstable.
 
 Native OS webviews for Bun, Deno & Node.js. Create real desktop windows with embedded web content using [wry](https://github.com/tauri-apps/wry) + [tao](https://github.com/tauri-apps/tao) — providing WebKit on macOS and Linux, and WebView2 on Windows.
 
