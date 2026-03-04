@@ -28,10 +28,14 @@ import { loadHtmlOrigin } from "@nativewindow/webview";
 const origin = loadHtmlOrigin();
 
 const schemas = {
-  /** Webview -> Host: ping request */
-  ping: z.string(),
-  /** Host -> Webview: status response */
-  status: z.string(),
+  host: {
+    /** Host -> Webview: status response */
+    status: z.string(),
+  },
+  client: {
+    /** Webview -> Host: ping request */
+    ping: z.string(),
+  },
 };
 
 const ch = createWindow(

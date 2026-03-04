@@ -15,8 +15,8 @@
  *
  * const { ChannelProvider, useChannel, useChannelEvent, useSend } =
  *   createChannelHooks({
- *     counter: z.number(),
- *     title: z.string(),
+ *     host: { title: z.string() },
+ *     client: { counter: z.number() },
  *   });
  *
  * function App() {
@@ -69,7 +69,7 @@ import { createChannelClient } from "@nativewindow/ipc/client";
 // ── Context (internal) ─────────────────────────────────────────────
 
 /** @internal React context holding the channel instance. */
-const ChannelContext = createContext<TypedChannel<any> | null>(null);
+const ChannelContext = createContext<TypedChannel<any, any> | null>(null);
 
 // ── ChannelProvider ────────────────────────────────────────────────
 
@@ -78,14 +78,18 @@ const ChannelContext = createContext<TypedChannel<any> | null>(null);
  *
  * @example
  * ```tsx
- * <ChannelProvider schemas={schemas}>
+ * <ChannelProvider schemas={{ host: hostSchemas, client: clientSchemas }}>
  *   <App />
  * </ChannelProvider>
  * ```
  */
-export interface ChannelProviderProps<S extends SchemaMap> {
-  /** Schemas for each event. Provides both TypeScript types and runtime validation. */
-  schemas: S;
+export interface ChannelProviderProps<H extends SchemaMap, C extends SchemaMap> {
+  /**
+   * Directional schemas for the channel.
+   * - `host`: events the host sends to the client (validated on receive).
+   * - `client`: events the client sends to the host (type-checked on send).
+   */
+  schemas: { host: H; client: C };
   /**
    * Called when an incoming payload fails schema validation.
    * If not provided, failed payloads are silently dropped.
@@ -108,8 +112,8 @@ export interface ChannelProviderProps<S extends SchemaMap> {
  * import { ChannelProvider } from "@nativewindow/react";
  *
  * const schemas = {
- *   counter: z.number(),
- *   title: z.string(),
+ *   host: { title: z.string() },
+ *   client: { counter: z.number() },
  * };
  *
  * function Root() {
@@ -121,9 +125,11 @@ export interface ChannelProviderProps<S extends SchemaMap> {
  * }
  * ```
  */
-export function ChannelProvider<S extends SchemaMap>(props: ChannelProviderProps<S>): ReactNode {
+export function ChannelProvider<H extends SchemaMap, C extends SchemaMap>(
+  props: ChannelProviderProps<H, C>,
+): ReactNode {
   const { schemas, onValidationError, children } = props;
-  const channelRef = useRef<TypedChannel<InferSchemaMap<S>> | null>(null);
+  const channelRef = useRef<TypedChannel<InferSchemaMap<C>, InferSchemaMap<H>> | null>(null);
 
   if (channelRef.current === null) {
     channelRef.current = createChannelClient({ schemas, onValidationError });
@@ -140,43 +146,53 @@ export function ChannelProvider<S extends SchemaMap>(props: ChannelProviderProps
  * Must be called inside a {@link ChannelProvider}. Throws if the
  * provider is missing.
  *
+ * @typeParam Send - Events this side can send (client events).
+ * @typeParam Receive - Events this side can receive (host events).
+ *
  * @example
  * ```tsx
  * import { useChannel } from "@nativewindow/react";
  *
- * type Events = { counter: number; title: string };
+ * type ClientEvents = { counter: number };
+ * type HostEvents = { title: string };
  *
  * function StatusBar() {
- *   const channel = useChannel<Events>();
+ *   const channel = useChannel<ClientEvents, HostEvents>();
  *   channel.send("counter", 1);
  * }
  * ```
  */
-export function useChannel<T extends EventMap = EventMap>(): TypedChannel<T> {
+export function useChannel<
+  Send extends EventMap = EventMap,
+  Receive extends EventMap = EventMap,
+>(): TypedChannel<Send, Receive> {
   const channel = useContext(ChannelContext);
   if (channel === null) {
     throw new Error("useChannel() must be used inside a <ChannelProvider>.");
   }
-  return channel as TypedChannel<T>;
+  return channel as TypedChannel<Send, Receive>;
 }
 
 // ── useChannelEvent ────────────────────────────────────────────────
 
 /**
- * Subscribe to a specific IPC event type with automatic cleanup.
+ * Subscribe to a specific incoming IPC event type with automatic cleanup.
  *
  * The handler is stored in a ref to avoid re-subscribing when the
  * handler function identity changes between renders. The subscription
  * itself only re-runs when `type` changes.
  *
+ * @typeParam Receive - The event map for incoming (receivable) events.
+ * @typeParam K - The specific event key to subscribe to.
+ *
  * @example
  * ```tsx
  * import { useChannelEvent } from "@nativewindow/react";
  *
- * type Events = { title: string };
+ * type HostEvents = { title: string };
  *
  * function TitleDisplay() {
- *   useChannelEvent<Events, "title">("title", (title) => {
+ *   useChannelEvent<HostEvents, "title">("title", (title) => {
  *     document.title = title;
  *   });
  *   return null;
@@ -184,17 +200,17 @@ export function useChannel<T extends EventMap = EventMap>(): TypedChannel<T> {
  * ```
  */
 export function useChannelEvent<
-  T extends EventMap = EventMap,
-  K extends keyof T & string = keyof T & string,
->(type: K, handler: (payload: T[K]) => void): void {
-  const channel = useChannel<T>();
+  Receive extends EventMap = EventMap,
+  K extends keyof Receive & string = keyof Receive & string,
+>(type: K, handler: (payload: Receive[K]) => void): void {
+  const channel = useChannel<EventMap, Receive>();
   const handlerRef = useRef(handler);
 
   // Keep the ref current without re-subscribing
   handlerRef.current = handler;
 
   useEffect(() => {
-    const stableHandler = (payload: T[K]): void => {
+    const stableHandler = (payload: Receive[K]): void => {
       handlerRef.current(payload);
     };
 
@@ -213,25 +229,27 @@ export function useChannelEvent<
  * A convenience wrapper around `useChannel().send`. The returned
  * function has a stable identity (does not change between renders).
  *
+ * @typeParam Send - The event map for outgoing (sendable) events.
+ *
  * @example
  * ```tsx
  * import { useSend } from "@nativewindow/react";
  *
- * type Events = { counter: number; title: string };
+ * type ClientEvents = { counter: number };
  *
  * function Counter() {
- *   const send = useSend<Events>();
+ *   const send = useSend<ClientEvents>();
  *   return <button onClick={() => send("counter", 1)}>Increment</button>;
  * }
  * ```
  */
-export function useSend<T extends EventMap = EventMap>(): <K extends keyof T & string>(
-  ...args: SendArgs<T, K>
+export function useSend<Send extends EventMap = EventMap>(): <K extends keyof Send & string>(
+  ...args: SendArgs<Send, K>
 ) => void {
-  const channel = useChannel<T>();
+  const channel = useChannel<Send, EventMap>();
 
   return useCallback(
-    <K extends keyof T & string>(...args: SendArgs<T, K>): void => {
+    <K extends keyof Send & string>(...args: SendArgs<Send, K>): void => {
       channel.send(...args);
     },
     [channel],
@@ -262,22 +280,29 @@ export interface ChannelHooksOptions {
  * The set of pre-typed React hooks and provider returned by
  * {@link createChannelHooks}.
  *
- * All hooks are bound to the same internal context and typed to `T`,
- * so event names and payload types are inferred automatically without
- * requiring generic type parameters at the call site.
+ * All hooks are bound to the same internal context and typed with
+ * separate Send/Receive maps, so event names and payload types are
+ * inferred automatically without requiring generic type parameters
+ * at the call site.
+ *
+ * @typeParam Send - Events the client sends to the host.
+ * @typeParam Receive - Events the client receives from the host.
  */
-export interface TypedChannelHooks<T extends EventMap> {
+export interface TypedChannelHooks<Send extends EventMap, Receive extends EventMap> {
   /**
    * Context provider that creates the channel client once.
    * Wrap your React app with this at the root.
    */
   ChannelProvider: (props: { children: ReactNode }) => ReactNode;
   /** Access the typed channel from context. Throws if outside the provider. */
-  useChannel: () => TypedChannel<T>;
-  /** Subscribe to a typed event with automatic cleanup. */
-  useChannelEvent: <K extends keyof T & string>(type: K, handler: (payload: T[K]) => void) => void;
-  /** Returns a stable typed `send` function. */
-  useSend: () => <K extends keyof T & string>(...args: SendArgs<T, K>) => void;
+  useChannel: () => TypedChannel<Send, Receive>;
+  /** Subscribe to a typed incoming (host) event with automatic cleanup. */
+  useChannelEvent: <K extends keyof Receive & string>(
+    type: K,
+    handler: (payload: Receive[K]) => void,
+  ) => void;
+  /** Returns a stable typed `send` function for outgoing (client) events. */
+  useSend: () => <K extends keyof Send & string>(...args: SendArgs<Send, K>) => void;
 }
 
 /**
@@ -292,16 +317,16 @@ export interface TypedChannelHooks<T extends EventMap> {
  * import { z } from "zod";
  * import { createChannelHooks } from "@nativewindow/react";
  *
- * // Types are inferred: { counter: number; title: string }
+ * // Types are inferred from directional schemas
  * const { ChannelProvider, useChannel, useChannelEvent, useSend } =
  *   createChannelHooks({
- *     counter: z.number(),
- *     title: z.string(),
+ *     host: { title: z.string() },
+ *     client: { counter: z.number() },
  *   });
  *
  * function App() {
- *   const send = useSend();                        // fully typed
- *   useChannelEvent("title", (t) => {              // t: string
+ *   const send = useSend();                        // fully typed (client events)
+ *   useChannelEvent("title", (t) => {              // t: string (host events)
  *     document.title = t;
  *   });
  *   return <button onClick={() => send("counter", 1)}>+1</button>;
@@ -316,17 +341,19 @@ export interface TypedChannelHooks<T extends EventMap> {
  * }
  * ```
  */
-export function createChannelHooks<S extends SchemaMap>(
-  schemas: S,
+export function createChannelHooks<H extends SchemaMap, C extends SchemaMap>(
+  schemas: { host: H; client: C },
   options?: ChannelHooksOptions,
-): TypedChannelHooks<InferSchemaMap<S>> {
-  type T = InferSchemaMap<S>;
+): TypedChannelHooks<InferSchemaMap<C>, InferSchemaMap<H>> {
+  // Client sends C events, receives H events
+  type Send = InferSchemaMap<C>;
+  type Receive = InferSchemaMap<H>;
 
   // Each factory call gets its own context — supports multiple channels
-  const HooksContext = createContext<TypedChannel<T> | null>(null);
+  const HooksContext = createContext<TypedChannel<Send, Receive> | null>(null);
 
   function HooksProvider(props: { children: ReactNode }): ReactNode {
-    const channelRef = useRef<TypedChannel<T> | null>(null);
+    const channelRef = useRef<TypedChannel<Send, Receive> | null>(null);
 
     if (channelRef.current === null) {
       channelRef.current = createChannelClient({
@@ -338,7 +365,7 @@ export function createChannelHooks<S extends SchemaMap>(
     return createElement(HooksContext.Provider, { value: channelRef.current }, props.children);
   }
 
-  function hooks_useChannel(): TypedChannel<T> {
+  function hooks_useChannel(): TypedChannel<Send, Receive> {
     const channel = useContext(HooksContext);
     if (channel === null) {
       throw new Error(
@@ -348,16 +375,16 @@ export function createChannelHooks<S extends SchemaMap>(
     return channel;
   }
 
-  function hooks_useChannelEvent<K extends keyof T & string>(
+  function hooks_useChannelEvent<K extends keyof Receive & string>(
     type: K,
-    handler: (payload: T[K]) => void,
+    handler: (payload: Receive[K]) => void,
   ): void {
     const channel = hooks_useChannel();
     const handlerRef = useRef(handler);
     handlerRef.current = handler;
 
     useEffect(() => {
-      const stableHandler = (payload: T[K]): void => {
+      const stableHandler = (payload: Receive[K]): void => {
         handlerRef.current(payload);
       };
 
@@ -368,11 +395,11 @@ export function createChannelHooks<S extends SchemaMap>(
     }, [channel, type]);
   }
 
-  function hooks_useSend(): <K extends keyof T & string>(...args: SendArgs<T, K>) => void {
+  function hooks_useSend(): <K extends keyof Send & string>(...args: SendArgs<Send, K>) => void {
     const channel = hooks_useChannel();
 
     return useCallback(
-      <K extends keyof T & string>(...args: SendArgs<T, K>): void => {
+      <K extends keyof Send & string>(...args: SendArgs<Send, K>): void => {
         channel.send(...args);
       },
       [channel],

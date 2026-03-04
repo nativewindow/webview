@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/react",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "description": "React bindings for native-window IPC (alpha)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {

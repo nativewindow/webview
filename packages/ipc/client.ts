@@ -6,10 +6,14 @@
  * 1. **Imported** in a bundled webview app (shares node_modules):
  *    ```ts
  *    import { createChannelClient } from "native-window-ipc/client";
- *    type Events = { counter: number; title: string };
- *    const channel = createChannelClient<Events>();
- *    channel.send("counter", 42);
- *    channel.on("title", (t) => document.title = t);
+ *    const channel = createChannelClient({
+ *      schemas: {
+ *        host: { title: z.string() },
+ *        client: { counter: z.number() },
+ *      },
+ *    });
+ *    channel.send("counter", 42);       // only client events
+ *    channel.on("title", (t) => {});    // only host events
  *    ```
  *
  * 2. **Auto-injected** by the host-side `createChannel()`.
@@ -23,11 +27,12 @@ import type {
   SchemaMap,
   SchemaLike,
   InferSchemaMap,
-} from ".";
+  EventMap,
+} from "./index.ts";
 
 declare global {
   interface Window {
-    __channel__?: TypedChannel<any>;
+    __channel__?: TypedChannel<any, any>;
     __native_message__?: (msg: string) => void;
     __native_message_listeners__?: {
       add(fn: (msg: string) => void): void;
@@ -79,20 +84,27 @@ function decode(raw: string): Envelope | null {
 
 /**
  * Options for {@link createChannelClient}.
- * The `schemas` field is required — it provides both TypeScript types
- * and runtime validation for incoming payloads from the host.
+ * The `schemas` field is required — it uses directional groups matching
+ * the host-side `createChannel` options.
  *
  * @example
  * ```ts
  * import { z } from "zod";
  * const ch = createChannelClient({
- *   schemas: { counter: z.number(), title: z.string() },
+ *   schemas: {
+ *     host: { "update-title": z.string() },
+ *     client: { "user-click": z.object({ x: z.number(), y: z.number() }) },
+ *   },
  * });
  * ```
  */
-export interface ChannelClientOptions<S extends SchemaMap> {
-  /** Schemas for incoming events. Provides types and runtime validation. */
-  schemas: S;
+export interface ChannelClientOptions<H extends SchemaMap, C extends SchemaMap> {
+  /**
+   * Directional schemas for the channel.
+   * - `host`: events the host sends to the client (validated on receive).
+   * - `client`: events the client sends to the host (type-checked on send).
+   */
+  schemas: { host: H; client: C };
   /**
    * Called when an incoming payload fails schema validation.
    * If not provided, failed payloads are silently dropped.
@@ -119,6 +131,9 @@ function validatePayload(
  * Create a typed channel client for use inside the webview.
  * Call this once; it hooks into the native IPC bridge.
  *
+ * The client sends events defined by the `client` schemas and receives
+ * events defined by the `host` schemas — the inverse of the host side.
+ *
  * @example
  * ```ts
  * import { z } from "zod";
@@ -126,20 +141,23 @@ function validatePayload(
  *
  * const ch = createChannelClient({
  *   schemas: {
- *     "user-click": z.object({ x: z.number(), y: z.number() }),
- *     "update-title": z.string(),
+ *     host: { "update-title": z.string() },
+ *     client: { "user-click": z.object({ x: z.number(), y: z.number() }) },
  *   },
  * });
  *
- * ch.on("update-title", (title) => {
+ * ch.send("user-click", { x: 10, y: 20 }); // only client events
+ * ch.on("update-title", (title) => {        // only host events
  *   document.title = title;
  * });
  * ```
  */
-export function createChannelClient<S extends SchemaMap>(
-  options: ChannelClientOptions<S>,
-): TypedChannel<InferSchemaMap<S>> {
+export function createChannelClient<H extends SchemaMap, C extends SchemaMap>(
+  options: ChannelClientOptions<H, C>,
+): TypedChannel<InferSchemaMap<C>, InferSchemaMap<H>> {
   const { schemas, onValidationError } = options;
+  const hostSchemas = schemas.host;
+  const clientSchemas = schemas.client;
 
   // Save Array.prototype methods to prevent prototype pollution attacks
   const _push = Array.prototype.push;
@@ -148,17 +166,18 @@ export function createChannelClient<S extends SchemaMap>(
 
   const listeners = new Map<string, Set<(payload: any) => void>>();
 
-  const channel: TypedChannel<InferSchemaMap<S>> = {
-    send<K extends keyof InferSchemaMap<S> & string>(
-      ...args: SendArgs<InferSchemaMap<S>, K>
+  // Client sends C events (client schemas), receives H events (host schemas)
+  const channel: TypedChannel<InferSchemaMap<C>, InferSchemaMap<H>> = {
+    send<K extends keyof InferSchemaMap<C> & string>(
+      ...args: SendArgs<InferSchemaMap<C>, K>
     ): void {
       const [type, payload] = args;
       window.ipc.postMessage(encode(type, payload));
     },
 
-    on<K extends keyof InferSchemaMap<S> & string>(
+    on<K extends keyof InferSchemaMap<H> & string>(
       type: K,
-      handler: (payload: InferSchemaMap<S>[K]) => void,
+      handler: (payload: InferSchemaMap<H>[K]) => void,
     ): void {
       let set = listeners.get(type);
       if (!set) {
@@ -168,9 +187,9 @@ export function createChannelClient<S extends SchemaMap>(
       set.add(handler as (payload: any) => void);
     },
 
-    off<K extends keyof InferSchemaMap<S> & string>(
+    off<K extends keyof InferSchemaMap<H> & string>(
       type: K,
-      handler: (payload: InferSchemaMap<S>[K]) => void,
+      handler: (payload: InferSchemaMap<H>[K]) => void,
     ): void {
       const set = listeners.get(type);
       if (set) set.delete(handler as (payload: any) => void);
@@ -188,8 +207,8 @@ export function createChannelClient<S extends SchemaMap>(
       value(msg: string): void {
         const env = decode(msg);
         if (env) {
-          // Drop messages whose $ch is not a known schema key (strict allowlist)
-          if (!(env.$ch in schemas)) {
+          // Drop messages whose $ch is not a known host schema key (strict allowlist)
+          if (!(env.$ch in hostSchemas)) {
             // Forward to external listeners — not a recognized channel message
             for (const fn of externalListeners) {
               try {
@@ -201,8 +220,8 @@ export function createChannelClient<S extends SchemaMap>(
           }
           const set = listeners.get(env.$ch);
           if (set) {
-            // Validate payload against the schema for this channel
-            const schema = schemas[env.$ch];
+            // Validate payload against the host schema for this channel
+            const schema = hostSchemas[env.$ch];
             let validatedPayload: unknown = env.p;
             if (schema) {
               const result = validatePayload(schema, env.p);

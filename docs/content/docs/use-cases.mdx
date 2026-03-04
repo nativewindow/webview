@@ -17,8 +17,12 @@ const ch = createWindow(
   { title: "Stream Deck Companion", width: 720, height: 480 },
   {
     schemas: {
-      keyPress: z.object({ row: z.number(), col: z.number() }),
-      setKeyImage: z.object({ key: z.number(), src: z.string() }),
+      host: {
+        keyPress: z.object({ row: z.number(), col: z.number() }),
+      },
+      client: {
+        setKeyImage: z.object({ key: z.number(), src: z.string() }),
+      },
     },
   },
 );
@@ -61,7 +65,7 @@ Many CLI tools produce output that is better understood visually — markdown re
 import { z } from "zod";
 import { createWindow } from "@nativewindow/ipc";
 
-const ch = createWindow({ title: "Markdown Preview" }, { schemas: { render: z.string() } });
+const ch = createWindow({ title: "Markdown Preview" }, { schemas: { host: { render: z.string() }, client: {} } });
 
 ch.window.loadHtml(`
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css">
@@ -98,9 +102,13 @@ const ch = createWindow(
   { title: "Notes" },
   {
     schemas: {
-      saveNote: z.object({ id: z.string(), content: z.string() }),
-      loadNotes: z.object({}),
-      notesList: z.array(z.object({ id: z.string(), content: z.string() })),
+      host: {
+        notesList: z.array(z.object({ id: z.string(), content: z.string() })),
+      },
+      client: {
+        saveNote: z.object({ id: z.string(), content: z.string() }),
+        loadNotes: z.object({}),
+      },
     },
   },
 );
@@ -132,8 +140,12 @@ const ch = createWindow(
   { title: "Device Monitor" },
   {
     schemas: {
-      sensorData: z.object({ temp: z.number(), humidity: z.number() }),
-      sendCommand: z.string(),
+      host: {
+        sensorData: z.object({ temp: z.number(), humidity: z.number() }),
+      },
+      client: {
+        sendCommand: z.string(),
+      },
     },
   },
 );
@@ -181,8 +193,11 @@ const ch = createWindow(
   { title: "Deploy Progress", width: 500, height: 300 },
   {
     schemas: {
-      progress: z.object({ step: z.string(), pct: z.number() }),
-      done: z.object({ success: z.boolean(), message: z.string() }),
+      host: {
+        progress: z.object({ step: z.string(), pct: z.number() }),
+        done: z.object({ success: z.boolean(), message: z.string() }),
+      },
+      client: {},
     },
   },
 );
