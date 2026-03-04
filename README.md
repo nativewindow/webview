@@ -5,10 +5,10 @@
 # @nativewindow/webview
 
 [![CI](https://github.com/nativewindow/webview/actions/workflows/ci.yml/badge.svg)](https://github.com/nativewindow/webview/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@nativewindow/webview)](https://www.npmjs.com/package/@nativewindow/webview)
-[![npm](https://img.shields.io/npm/v/@nativewindow/ipc?label=native-window-ipc)](https://www.npmjs.com/package/@nativewindow/ipc)
-[![npm](https://img.shields.io/npm/v/@nativewindow/react?label=native-window-ipc-react)](https://www.npmjs.com/package/@nativewindow/react)
-[![npm](https://img.shields.io/npm/v/@nativewindow/tsdb?label=native-window-tsdb)](https://www.npmjs.com/package/@nativewindow/tsdb)
+[![npm](https://img.shields.io/npm/v/@nativewindow/webview?label=@nativewindow/webview)](https://www.npmjs.com/package/@nativewindow/webview)
+[![npm](https://img.shields.io/npm/v/@nativewindow/ipc?label=@nativewindow/ipc)](https://www.npmjs.com/package/@nativewindow/ipc)
+[![npm](https://img.shields.io/npm/v/@nativewindow/react?label=@nativewindow/react)](https://www.npmjs.com/package/@nativewindow/react)
+[![npm](https://img.shields.io/npm/v/@nativewindow/tsdb?label=@nativewindow/tsdb)](https://www.npmjs.com/package/@nativewindow/tsdb)
 
 > [!NOTE]
 > This project is in **beta**. APIs may change without notice and some features may be incomplete or unstable.
@@ -74,19 +74,26 @@ Use `native-window-ipc` for compile-time checked messaging between Bun/Deno/Node
 
 ```ts
 import { z } from "zod";
-import { createWindow } from "native-window-ipc";
+import { createWindow } from "@nativewindow/ipc";
 
 const ch = createWindow(
   { title: "Typed IPC" },
   {
     schemas: {
-      "user-click": z.object({ x: z.number(), y: z.number() }),
-      "update-title": z.string(),
-      counter: z.number(),
+      // host -> webview
+      host: {
+        "update-title": z.string(),
+      },
+      // webview -> host
+      client: {
+        "user-click": z.object({ x: z.number(), y: z.number() }),
+        counter: z.number(),
+      },
     },
   },
 );
 
+// Receive typed messages from the webview (client events)
 ch.on("user-click", (pos) => {
   // pos: { x: number; y: number }
   console.log(`Click at ${pos.x}, ${pos.y}`);
@@ -97,8 +104,8 @@ ch.on("counter", (n) => {
   ch.send("update-title", `Count: ${n}`);
 });
 
-// ch.send("counter", "wrong");      // Type error!
-// ch.send("typo", 123);             // Type error!
+// ch.send("counter", "wrong");      // Type error: "counter" is a client event
+// ch.send("typo", 123);             // Type error: "typo" does not exist
 
 ch.window.loadHtml(`<html>...</html>`);
 ```
@@ -122,15 +129,23 @@ For webview apps bundled with their own build step, import the client directly:
 
 ```ts
 import { z } from "zod";
-import { createChannelClient } from "native-window-ipc/client";
+import { createChannelClient } from "@nativewindow/ipc/client";
 
 const ch = createChannelClient({
   schemas: {
-    counter: z.number(),
-    "update-title": z.string(),
+    host: {
+      "update-title": z.string(),
+    },
+    client: {
+      counter: z.number(),
+    },
   },
 });
+
+// Send client events to the host
 ch.send("counter", 42); // Typed!
+
+// Receive host events from the host
 ch.on("update-title", (t) => {
   // t: string
   document.title = t;
