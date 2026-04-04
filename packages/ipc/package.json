@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/ipc",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Typesafe IPC channels for native-window (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {

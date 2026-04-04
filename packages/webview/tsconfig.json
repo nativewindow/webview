@@ -1,9 +1,6 @@
 {
   "compilerOptions": {
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
+    "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
@@ -11,9 +8,7 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "strict": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
@@ -23,10 +18,6 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": [
-    "index.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["index.ts"],
+  "exclude": ["node_modules"]
 }

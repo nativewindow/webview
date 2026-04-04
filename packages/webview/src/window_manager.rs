@@ -109,10 +109,6 @@ pub enum Command {
     Reload {
         id: u32,
     },
-    GetCookies {
-        id: u32,
-        url: Option<String>,
-    },
     ClearCookies {
         id: u32,
         host: Option<String>,
@@ -136,6 +132,8 @@ pub struct WindowManager {
     pub event_handlers: HashMap<u32, WindowEventHandlers>,
     pub initialized: bool,
     pub platform: Option<super::platform::Platform>,
+    /// Number of currently live windows (incremented on create, decremented on close).
+    pub window_count: u32,
 }
 
 /// Maximum number of commands in the queue before logging a warning.
@@ -154,6 +152,7 @@ impl WindowManager {
             event_handlers: HashMap::new(),
             initialized: false,
             platform: None,
+            window_count: 0,
         }
     }
 
@@ -249,8 +248,6 @@ thread_local! {
     pub static PENDING_NAVIGATION_BLOCKED: RefCell<Vec<(u32, String)>> = const { RefCell::new(Vec::new()) };
     /// Buffer for document title change events deferred during pump_events: (window_id, title).
     pub static PENDING_TITLE_CHANGES: RefCell<Vec<(u32, String)>> = const { RefCell::new(Vec::new()) };
-    /// Buffer for cookie query results deferred during pump_events: (window_id, json).
-    pub static PENDING_COOKIES: RefCell<Vec<(u32, String)>> = const { RefCell::new(Vec::new()) };
     /// Per-window stored HTML content for the custom protocol handler.
     /// When loadHtml() is called, the HTML is stored here and the webview
     /// navigates to the custom protocol URL which reads from this map.
@@ -354,7 +351,9 @@ pub fn is_host_allowed(window_id: u32, url: &str) -> bool {
                 return true;
             }
             match extract_host(url) {
-                Some(host) => hosts.iter().any(|pattern| host_matches_pattern(&host, pattern)),
+                Some(host) => hosts
+                    .iter()
+                    .any(|pattern| host_matches_pattern(&host, pattern)),
                 None => false, // No host extractable = blocked
             }
         } else {

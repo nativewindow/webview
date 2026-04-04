@@ -2,15 +2,15 @@
 
 build-native-addon:
   description: "Build the native window module"
-  command: "bun napi build --release --platform && bun vite build"
+  command: "bun napi build --release --platform && bun vite build 2>&1"
   cwd: ./packages/webview
 
 fmt-native-addon:
   description: "Format the code for the native window module"
-  command: "cargo fmt --all"
+  command: "cargo fmt --all 2>&1"
   cwd: ./packages/webview/src
-
+  
 clippy-native-addon:
   description: "Run Rust linter (clippy) for the native window module"
-  command: "cargo clippy"
+  command: "cargo clippy 2>&1"
   cwd: ./packages/webview

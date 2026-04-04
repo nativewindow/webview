@@ -93,3 +93,30 @@ pub struct WindowOptions {
     /// Default: `false`
     pub incognito: Option<bool>,
 }
+
+// ── Cookie types ───────────────────────────────────────────────
+
+/// Information about a cookie from the native cookie store.
+///
+/// Includes `HttpOnly` cookies that are invisible to `document.cookie`.
+/// Returned by `NativeWindow::getCookies()`.
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct CookieInfo {
+    /// Cookie name.
+    pub name: String,
+    /// Cookie value.
+    pub value: String,
+    /// Domain the cookie belongs to.
+    pub domain: String,
+    /// Path the cookie is restricted to.
+    pub path: String,
+    /// Whether the cookie is HttpOnly (inaccessible to JS).
+    pub http_only: bool,
+    /// Whether the cookie requires HTTPS.
+    pub secure: bool,
+    /// SameSite policy: "Strict", "Lax", "None", or null for unset.
+    pub same_site: Option<String>,
+    /// Expiry as Unix timestamp (seconds). Null for session cookies.
+    pub expires: Option<f64>,
+}

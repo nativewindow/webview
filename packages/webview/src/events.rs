@@ -36,10 +36,6 @@ pub type TitleChangedCallback = FatalTsfn<String>;
 /// Callback for reload events (no payload).
 pub type ReloadCallback = FatalTsfn<()>;
 
-/// Callback for cookie query results (JSON payload string).
-/// The payload is a JSON array of cookie objects.
-pub type CookiesCallback = FatalTsfn<String>;
-
 /// Callback for blocked navigation events: (url).
 pub type NavigationBlockedCallback = FatalTsfn<String>;
 
@@ -54,7 +50,6 @@ pub struct WindowEventHandlers {
     pub on_page_load: Option<PageLoadCallback>,
     pub on_title_changed: Option<TitleChangedCallback>,
     pub on_reload: Option<ReloadCallback>,
-    pub on_cookies: Option<CookiesCallback>,
     pub on_navigation_blocked: Option<NavigationBlockedCallback>,
 }
 
@@ -70,7 +65,6 @@ impl WindowEventHandlers {
             on_page_load: None,
             on_title_changed: None,
             on_reload: None,
-            on_cookies: None,
             on_navigation_blocked: None,
         }
     }

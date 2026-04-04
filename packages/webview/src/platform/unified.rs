@@ -18,12 +18,12 @@ use wry::WebViewBuilderExtWindows;
 use wry::{WebView, WebViewBuilder};
 
 use crate::events::WindowEventHandlers;
-use crate::options::WindowOptions;
+use crate::options::{CookieInfo, WindowOptions};
 use crate::window_manager::{
-    Command, EVENT_LOOP, MAX_PENDING_EVENTS, PENDING_BLURS, PENDING_CLOSES, PENDING_COOKIES,
-    PENDING_FOCUSES, PENDING_MESSAGES, PENDING_MOVES, PENDING_NAVIGATION_BLOCKED,
-    PENDING_PAGE_LOADS, PENDING_RESIZE_CALLBACKS, PENDING_TITLE_CHANGES, is_host_allowed,
-    is_navigation_scheme_blocked, is_origin_trusted, json_escape,
+    Command, EVENT_LOOP, MAX_PENDING_EVENTS, PENDING_BLURS, PENDING_CLOSES, PENDING_FOCUSES,
+    PENDING_MESSAGES, PENDING_MOVES, PENDING_NAVIGATION_BLOCKED, PENDING_PAGE_LOADS,
+    PENDING_RESIZE_CALLBACKS, PENDING_TITLE_CHANGES, is_host_allowed, is_navigation_scheme_blocked,
+    is_origin_trusted,
 };
 
 /// Maximum IPC message size (10 MB).
@@ -262,24 +262,6 @@ impl Platform {
                     }
                 }
             }
-            Command::GetCookies { id, url } => {
-                if let Some(entry) = self.windows.get(&id) {
-                    let json = match &url {
-                        Some(u) => match entry.webview.cookies_for_url(u) {
-                            Ok(cookies) => serialize_cookies(&cookies),
-                            Err(_) => "[]".to_string(),
-                        },
-                        None => match entry.webview.cookies() {
-                            Ok(cookies) => serialize_cookies(&cookies),
-                            Err(_) => "[]".to_string(),
-                        },
-                    };
-                    PENDING_COOKIES.with(|p| {
-                        // Cookies always push — getCookies() promises need a response.
-                        p.borrow_mut().push((id, json));
-                    });
-                }
-            }
             Command::ClearCookies { id, host } => {
                 if let Some(entry) = self.windows.get(&id) {
                     let cookies = match entry.webview.cookies() {
@@ -344,6 +326,43 @@ impl Platform {
             .map(|entry| entry.webview.is_devtools_open())
     }
 
+    // ── Cookie access ──────────────────────────────────────────────
+
+    /// Read cookies synchronously from the native cookie store.
+    ///
+    /// If `url` is provided, only cookies matching that URL are returned.
+    /// If `None`, all cookies are returned. Returns an empty vec if the
+    /// window doesn't exist or the cookie read fails.
+    pub fn get_cookies_sync(&self, id: u32, url: Option<&str>) -> Vec<CookieInfo> {
+        let Some(entry) = self.windows.get(&id) else {
+            return Vec::new();
+        };
+        let cookies = match url {
+            Some(u) => entry.webview.cookies_for_url(u).unwrap_or_default(),
+            None => entry.webview.cookies().unwrap_or_default(),
+        };
+        cookies
+            .iter()
+            .map(|c| CookieInfo {
+                name: c.name().to_string(),
+                value: c.value().to_string(),
+                domain: c.domain().unwrap_or("").to_string(),
+                path: c.path().unwrap_or("/").to_string(),
+                http_only: c.http_only().unwrap_or(false),
+                secure: c.secure().unwrap_or(false),
+                same_site: c.same_site().map(|s| match s {
+                    wry::cookie::SameSite::Strict => "Strict".to_string(),
+                    wry::cookie::SameSite::Lax => "Lax".to_string(),
+                    wry::cookie::SameSite::None => "None".to_string(),
+                }),
+                expires: c.expires().and_then(|e| match e {
+                    wry::cookie::Expiration::DateTime(dt) => Some(dt.unix_timestamp() as f64),
+                    wry::cookie::Expiration::Session => None,
+                }),
+            })
+            .collect()
+    }
+
     // ── Window destruction ──────────────────────────────────────
 
     /// Remove and destroy a window's native resources (tao Window + wry
@@ -356,7 +375,13 @@ impl Platform {
         if let Some(entry) = self.windows.remove(&id) {
             let tao_id = entry.window.id();
             self.window_id_map.remove(&tao_id);
-            // Drop entry — this closes the window and destroys the webview
+            // Hide the window immediately before dropping. On macOS, the tao
+            // Window drop may not call [NSWindow close] synchronously after an
+            // intercepted windowShouldClose: (which returned false). Calling
+            // set_visible(false) triggers [NSWindow orderOut:] which removes
+            // the window from the screen right away.
+            entry.window.set_visible(false);
+            // Drop entry — releases the WebView and Window native resources
             drop(entry);
             // Clean up security config
             crate::window_manager::TRUSTED_ORIGINS_MAP.with(|o| {
@@ -383,14 +408,18 @@ impl Platform {
     /// abrupt `process.exit()` in the callback leaves live native objects
     /// whose teardown fails (e.g. WebView2 "Failed to unregister class"
     /// on Windows).
+    ///
+    /// IDs are collected into a local Vec *before* any destruction so that
+    /// `PENDING_CLOSES` is not borrowed while dropping windows.  The macOS
+    /// Window drop can trigger synchronous delegate callbacks that route
+    /// back through thread-local buffers — holding a borrow during the
+    /// drop would cause a `RefCell` borrow conflict panic.
     pub fn destroy_pending_closes(&mut self) {
-        PENDING_CLOSES.with(|p| {
-            let pending = p.borrow();
-            for &id in pending.iter() {
-                // No-op if already destroyed by Command::Close
-                self.destroy_window_entry(id);
-            }
-        });
+        let ids: Vec<u32> = PENDING_CLOSES.with(|p| p.borrow().clone());
+        for id in ids {
+            // No-op if already destroyed by Command::Close
+            self.destroy_window_entry(id);
+        }
     }
 
     // ── Window creation ────────────────────────────────────────
@@ -804,12 +833,15 @@ document.addEventListener('DOMContentLoaded', function () {{
     ///
     /// Uses a two-phase approach:
     /// - Phase A: `run_return` dispatches tao-level events (WindowEvent, etc.)
-    /// - Phase B (macOS): raw NSApp event drain for cascading WebKit events
+    /// - Phase B (macOS): drain non-input NSApp events + CFRunLoop sources
     ///
     /// Phase B is needed because tao's `run_return` processes one CFRunLoop
     /// iteration via `[NSApp run]`, but WebKit operations (network → parse →
     /// render) generate cascading events that need additional iterations.
     /// Without the drain, each step waits 16ms for the next pump call.
+    /// Mouse and keyboard events are excluded from Phase B so that window
+    /// delegate callbacks (e.g. `windowShouldClose:`) only fire while tao's
+    /// event handler is active in Phase A.
     pub fn pump_events(&mut self) {
         // Phase A: tao event dispatch
         EVENT_LOOP.with(|el| {
@@ -883,14 +915,16 @@ document.addEventListener('DOMContentLoaded', function () {{
         // Phase B: drain remaining platform events for WebKit processing
         #[cfg(target_os = "macos")]
         self.drain_macos_events();
+    }
 
-        // Phase C (macOS): demote back to Accessory activation policy when the
-        // last window has closed. Doing this here — after the event loop has
-        // fully processed — ensures NSApp's internal window list is empty
-        // before we change the policy. Calling setActivationPolicy inside
-        // destroy_window_entry (synchronously during window drop) is too early:
-        // NSApp hasn't yet removed the closing NSWindow from its window list,
-        // so the call silently fails and the Dock icon remains.
+    /// Hide the macOS Dock icon when no windows remain open.
+    ///
+    /// Must be called **after** all pending window destructions are complete
+    /// (i.e., after `destroy_pending_closes`) so that `self.windows` accurately
+    /// reflects the current window count.  Calling this inside `pump_events`
+    /// is too early for OS-initiated closes (`CloseRequested`), because the
+    /// windows are not destroyed until `destroy_pending_closes` runs.
+    pub fn update_dock_visibility(&mut self) {
         #[cfg(target_os = "macos")]
         if self.dock_visible && self.windows.is_empty() {
             set_macos_activation_policy_accessory();
@@ -898,21 +932,27 @@ document.addEventListener('DOMContentLoaded', function () {{
         }
     }
 
-    /// Drain remaining events and run-loop sources after `run_return`.
+    /// Drain remaining events and CFRunLoop sources after `run_return`.
     ///
     /// WebKit (WKWebView) relies on **both** NSApp events and CFRunLoop
     /// sources (GCD dispatch queues, Mach port notifications) for internal
     /// processing.  tao's `run_return` processes one event-loop iteration
-    /// then exits via `[NSApp stop:]`, leaving pending CFRunLoop sources
-    /// unprocessed.  The previous implementation only drained NSApp events
-    /// via `nextEventMatchingMask:distantPast`, which missed GCD/Mach-port
-    /// callbacks entirely — causing 3-10 s content-rendering delays.
+    /// then exits via `[NSApp stop:]`, leaving pending work unprocessed.
+    /// Without this drain, each cascading WebKit step waits 16ms for the
+    /// next pump call, causing visible content-rendering delays.
     ///
     /// This method alternates between:
-    ///   1. Draining all immediately-available NSApp events (`sendEvent:`)
+    ///   1. Draining immediately-available **non-input** NSApp events
     ///   2. Processing one pending CFRunLoop source (`CFRunLoopRunInMode`)
-    ///      …until both queues are empty.  CFRunLoop sources can generate NSApp
-    ///      events and vice-versa, so alternating handles cascading work.
+    ///      …until both queues are empty.
+    ///
+    /// **Important:** Mouse and keyboard events are excluded from the drain
+    /// mask.  They must be processed exclusively through tao's `run_return`
+    /// (Phase A) so that tao's event handler is active when window delegate
+    /// callbacks fire.  Processing a close-button click via `sendEvent:`
+    /// outside `run_return` triggers `windowShouldClose:` while tao's
+    /// handler is inactive — the resulting `CloseRequested` event is lost
+    /// and the window never closes.
     #[cfg(target_os = "macos")]
     fn drain_macos_events(&self) {
         use objc2_app_kit::{NSApplication, NSEventMask};
@@ -930,6 +970,9 @@ document.addEventListener('DOMContentLoaded', function () {{
         }
         /// `CFRunLoopRunInMode` return value when a source was dispatched.
         const K_CF_RUN_LOOP_RUN_HANDLED_SOURCE: i32 = 4;
+        /// Safety cap to prevent unbounded looping if sources keep
+        /// generating more work.
+        const MAX_DRAIN_ITERATIONS: usize = 500;
 
         unsafe {
             let Some(mtm) = MainThreadMarker::new() else {
@@ -940,13 +983,33 @@ document.addEventListener('DOMContentLoaded', function () {{
             };
             let app = NSApplication::sharedApplication(mtm);
 
-            loop {
+            // Mask that includes everything EXCEPT mouse and keyboard events.
+            // User input events stay in the queue for the next `run_return`.
+            let user_input = NSEventMask::LeftMouseDown
+                | NSEventMask::LeftMouseUp
+                | NSEventMask::RightMouseDown
+                | NSEventMask::RightMouseUp
+                | NSEventMask::MouseMoved
+                | NSEventMask::LeftMouseDragged
+                | NSEventMask::RightMouseDragged
+                | NSEventMask::MouseEntered
+                | NSEventMask::MouseExited
+                | NSEventMask::KeyDown
+                | NSEventMask::KeyUp
+                | NSEventMask::FlagsChanged
+                | NSEventMask::ScrollWheel
+                | NSEventMask::OtherMouseDown
+                | NSEventMask::OtherMouseUp
+                | NSEventMask::OtherMouseDragged;
+            let drain_mask = NSEventMask::Any - user_input;
+
+            for _ in 0..MAX_DRAIN_ITERATIONS {
                 let mut did_work = false;
 
-                // ── Phase 1: drain all immediately-available NSApp events ──
+                // ── Phase 1: drain non-input NSApp events ──────────────
                 loop {
                     let event = app.nextEventMatchingMask_untilDate_inMode_dequeue(
-                        NSEventMask::Any,
+                        drain_mask,
                         Some(&NSDate::distantPast()),
                         NSDefaultRunLoopMode,
                         true,
@@ -960,7 +1023,7 @@ document.addEventListener('DOMContentLoaded', function () {{
                     }
                 }
 
-                // ── Phase 2: process one pending CFRunLoop source ──────────
+                // ── Phase 2: process one pending CFRunLoop source ──────
                 // (GCD dispatch blocks, Mach-port notifications, timers)
                 let result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.0, 1);
                 if result == K_CF_RUN_LOOP_RUN_HANDLED_SOURCE {
@@ -1090,49 +1153,4 @@ fn setup_macos_menu() {
     menu_bar.addItem(&edit_item);
 
     app.setMainMenu(Some(&menu_bar));
-}
-
-// ── Cookie serialization ───────────────────────────────────────
-
-/// Serialize a list of wry cookies to a JSON array string.
-fn serialize_cookies(cookies: &[wry::cookie::Cookie<'static>]) -> String {
-    // wry::CookieJar wraps cookie::Cookie
-    let mut out = String::from("[");
-    for (i, cookie_jar) in cookies.iter().enumerate() {
-        if i > 0 {
-            out.push(',');
-        }
-        let name = json_escape(cookie_jar.name());
-        let value = json_escape(cookie_jar.value());
-        let domain = cookie_jar
-            .domain()
-            .map(json_escape)
-            .unwrap_or_else(|| "\"\"".to_string());
-        let path = cookie_jar
-            .path()
-            .map(json_escape)
-            .unwrap_or_else(|| "\"/\"".to_string());
-        let http_only = cookie_jar.http_only().unwrap_or(false);
-        let secure = cookie_jar.secure().unwrap_or(false);
-        let same_site = match cookie_jar.same_site() {
-            Some(wry::cookie::SameSite::Strict) => "\"Strict\"",
-            Some(wry::cookie::SameSite::Lax) => "\"Lax\"",
-            Some(wry::cookie::SameSite::None) => "\"None\"",
-            None => "null",
-        };
-        let expires = cookie_jar
-            .expires()
-            .and_then(|e| match e {
-                wry::cookie::Expiration::DateTime(dt) => Some(format!("{}", dt.unix_timestamp())),
-                wry::cookie::Expiration::Session => None,
-            })
-            .unwrap_or_else(|| "null".to_string());
-
-        out.push_str(&format!(
-            "{{\"name\":{},\"value\":{},\"domain\":{},\"path\":{},\"httpOnly\":{},\"secure\":{},\"sameSite\":{},\"expires\":{}}}",
-            name, value, domain, path, http_only, secure, same_site, expires
-        ));
-    }
-    out.push(']');
-    out
 }

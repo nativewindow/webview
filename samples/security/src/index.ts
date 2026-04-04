@@ -251,20 +251,16 @@ ch.on("user-action", (data) => {
   ch.send("status", `Accepted action: "${safe}" (validated + sanitized)`);
 });
 
-ch.on("request-cookies", async () => {
+ch.on("request-cookies", () => {
   console.log("[Bun] Cookie audit requested");
-  try {
-    const cookies = await ch.window.getCookies();
-    if (cookies.length === 0) {
-      ch.send("cookie-report", "No cookies found (expected for local HTML content)");
-    } else {
-      const report = cookies
-        .map((c) => `${c.name}: httpOnly=${c.httpOnly}, secure=${c.secure}, sameSite=${c.sameSite}`)
-        .join("\n");
-      ch.send("cookie-report", report);
-    }
-  } catch {
-    ch.send("cookie-report", "Cookie access not available");
+  const cookies = ch.window.getCookies();
+  if (cookies.length === 0) {
+    ch.send("cookie-report", "No cookies found (expected for local HTML content)");
+  } else {
+    const report = cookies
+      .map((c) => `${c.name}: httpOnly=${c.httpOnly}, secure=${c.secure}, sameSite=${c.sameSite}`)
+      .join("\n");
+    ch.send("cookie-report", report);
   }
 });
 

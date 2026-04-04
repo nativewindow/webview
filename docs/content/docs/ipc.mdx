@@ -199,14 +199,14 @@ You can also get the client script as a string for manual injection:
 import { getClientScript } from "@nativewindow/ipc";
 
 const script = getClientScript();
-win.unsafe.evaluateJs(script);
+win.evaluateJs(script);
 ```
 
 When using `channelId`, pass it to `getClientScript` so the injected client uses the same namespace:
 
 ```ts
 const script = getClientScript({ channelId: "my-namespace" });
-win.unsafe.evaluateJs(script);
+win.evaluateJs(script);
 ```
 
 ## Channel Options

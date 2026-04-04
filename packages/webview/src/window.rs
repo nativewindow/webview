@@ -2,11 +2,10 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 use crate::events::{
-    CloseCallback, CookiesCallback, FocusCallback, MessageCallback, MoveCallback,
-    NavigationBlockedCallback, PageLoadCallback, ReloadCallback, ResizeCallback,
-    TitleChangedCallback,
+    CloseCallback, FocusCallback, MessageCallback, MoveCallback, NavigationBlockedCallback,
+    PageLoadCallback, ReloadCallback, ResizeCallback, TitleChangedCallback,
 };
-use crate::options::WindowOptions;
+use crate::options::{CookieInfo, WindowOptions};
 use crate::window_manager::{
     ALLOWED_HOSTS_MAP, Command, PERMISSIONS_MAP, PermissionFlags, TRUSTED_ORIGINS_MAP,
     extract_origin, is_url_scheme_allowed, with_manager,
@@ -16,21 +15,25 @@ use crate::window_manager::{
 #[napi]
 pub struct NativeWindow {
     id: u32,
+    closed: bool,
 }
 
 #[napi]
 impl NativeWindow {
     /// Create a new native window with the given options.
-    /// The window is created asynchronously during the next `pumpEvents()` call.
+    ///
+    /// Automatically initializes the native subsystem on first call and
+    /// starts the native event pump when the first window is created.
+    /// The window is created asynchronously during the next `pumpEvents()` cycle.
     #[napi(constructor)]
-    pub fn new(options: Option<WindowOptions>) -> Result<Self> {
+    pub fn new(env: Env, options: Option<WindowOptions>) -> Result<Self> {
         let opts = options.unwrap_or_default();
 
-        let id = with_manager(|mgr| {
+        let (id, needs_pump) = with_manager(|mgr| -> napi::Result<(u32, bool)> {
+            // Auto-init on first window creation
             if !mgr.initialized {
-                return Err(napi::Error::from_reason(
-                    "Native window system not initialized. Call init() first.",
-                ));
+                mgr.platform = Some(crate::platform::Platform::new()?);
+                mgr.initialized = true;
             }
             let id = mgr.allocate_id()?;
             // Store trusted origins for native-layer IPC filtering.
@@ -70,10 +73,38 @@ impl NativeWindow {
                 id,
                 options: Box::new(opts),
             });
-            Ok(id)
+
+            // Track window count and determine if we need to start the pump
+            mgr.window_count += 1;
+            let needs_pump = !crate::pump::is_pump_running();
+            Ok((id, needs_pump))
         })?;
 
-        Ok(Self { id })
+        // Start the event pump on first window creation.
+        // Must happen outside with_manager() because start_pump needs &Env.
+        if needs_pump {
+            // Create a JS function that wraps pump_events().
+            // When setInterval fires this function, pumpEvents() runs on the
+            // main thread — exactly like the old JS `setInterval(pumpEvents, 16)`.
+            let pump_fn: Function<'_, (), ()> =
+                env.create_function_from_closure("__nw_pump", |ctx| {
+                    if let Err(e) = crate::pump_events(*ctx.env) {
+                        eprintln!("[native-window] pumpEvents() error: {}", e);
+                    }
+                    Ok(())
+                })?;
+            crate::pump::start_pump(&env, pump_fn.into_unknown(&env)?)?;
+        }
+
+        Ok(Self { id, closed: false })
+    }
+
+    /// Check that the window is still open; returns an error if it has been closed.
+    fn ensure_open(&self) -> Result<()> {
+        if self.closed {
+            return Err(napi::Error::from_reason("Window is closed"));
+        }
+        Ok(())
     }
 
     /// Get the unique window ID.
@@ -88,6 +119,7 @@ impl NativeWindow {
     /// Only `http:`, `https:`, and internal `nativewindow:` schemes are allowed.
     #[napi]
     pub fn load_url(&self, url: String) -> Result<()> {
+        self.ensure_open()?;
         let trimmed = url.trim().to_string();
         // Allowlist: only permit safe schemes
         if !is_url_scheme_allowed(&trimmed) {
@@ -108,6 +140,7 @@ impl NativeWindow {
     /// Load an HTML string directly in the webview.
     #[napi]
     pub fn load_html(&self, html: String) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::LoadHTML { id: self.id, html });
         });
@@ -118,6 +151,7 @@ impl NativeWindow {
     /// This is fire-and-forget; use onMessage to receive results.
     #[napi]
     pub fn evaluate_js(&self, script: String) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::EvaluateJS {
                 id: self.id,
@@ -131,6 +165,7 @@ impl NativeWindow {
     /// This calls `window.__native_message__(msg)` in the webview context.
     #[napi]
     pub fn post_message(&self, message: String) -> Result<()> {
+        self.ensure_open()?;
         // Use json_escape() for safe embedding — handles all control chars,
         // quotes, backslashes, and </script> in a single pass.
         let safe_msg = crate::window_manager::json_escape(&message);
@@ -152,6 +187,7 @@ impl NativeWindow {
     /// Set the window title.
     #[napi]
     pub fn set_title(&self, title: String) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetTitle { id: self.id, title });
         });
@@ -161,6 +197,7 @@ impl NativeWindow {
     /// Set the window size in logical pixels.
     #[napi]
     pub fn set_size(&self, width: f64, height: f64) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetSize {
                 id: self.id,
@@ -174,6 +211,7 @@ impl NativeWindow {
     /// Set the minimum window size.
     #[napi]
     pub fn set_min_size(&self, width: f64, height: f64) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetMinSize {
                 id: self.id,
@@ -187,6 +225,7 @@ impl NativeWindow {
     /// Set the maximum window size.
     #[napi]
     pub fn set_max_size(&self, width: f64, height: f64) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetMaxSize {
                 id: self.id,
@@ -200,6 +239,7 @@ impl NativeWindow {
     /// Set the window position in screen coordinates.
     #[napi]
     pub fn set_position(&self, x: f64, y: f64) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetPosition { id: self.id, x, y });
         });
@@ -209,6 +249,7 @@ impl NativeWindow {
     /// Set whether the window is resizable.
     #[napi]
     pub fn set_resizable(&self, resizable: bool) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetResizable {
                 id: self.id,
@@ -221,6 +262,7 @@ impl NativeWindow {
     /// Set whether the window has decorations (title bar, borders).
     #[napi]
     pub fn set_decorations(&self, decorations: bool) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetDecorations {
                 id: self.id,
@@ -233,6 +275,7 @@ impl NativeWindow {
     /// Set whether the window is always on top.
     #[napi]
     pub fn set_always_on_top(&self, always_on_top: bool) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetAlwaysOnTop {
                 id: self.id,
@@ -245,6 +288,7 @@ impl NativeWindow {
     /// Show the window.
     #[napi]
     pub fn show(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::Show { id: self.id });
         });
@@ -254,6 +298,7 @@ impl NativeWindow {
     /// Hide the window.
     #[napi]
     pub fn hide(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::Hide { id: self.id });
         });
@@ -262,7 +307,9 @@ impl NativeWindow {
 
     /// Close and destroy the window.
     #[napi]
-    pub fn close(&self) -> Result<()> {
+    pub fn close(&mut self) -> Result<()> {
+        self.ensure_open()?;
+        self.closed = true;
         with_manager(|mgr| {
             mgr.push_command(Command::Close { id: self.id });
         });
@@ -272,6 +319,7 @@ impl NativeWindow {
     /// Focus the window.
     #[napi]
     pub fn focus(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::Focus { id: self.id });
         });
@@ -281,6 +329,7 @@ impl NativeWindow {
     /// Maximize the window.
     #[napi]
     pub fn maximize(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::Maximize { id: self.id });
         });
@@ -290,6 +339,7 @@ impl NativeWindow {
     /// Minimize the window.
     #[napi]
     pub fn minimize(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::Minimize { id: self.id });
         });
@@ -299,6 +349,7 @@ impl NativeWindow {
     /// Restore the window from maximized state.
     #[napi]
     pub fn unmaximize(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::Unmaximize { id: self.id });
         });
@@ -308,6 +359,7 @@ impl NativeWindow {
     /// Reload the current page in the webview.
     #[napi]
     pub fn reload(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::Reload { id: self.id });
         });
@@ -318,6 +370,7 @@ impl NativeWindow {
     /// On macOS this is silently ignored.
     #[napi]
     pub fn set_icon(&self, path: String) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::SetIcon { id: self.id, path });
         });
@@ -331,6 +384,7 @@ impl NativeWindow {
     /// The callback receives the message string and the source page URL.
     #[napi(ts_args_type = "callback: (message: string, sourceUrl: string) => void")]
     pub fn on_message(&self, callback: MessageCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_message = Some(callback);
@@ -342,6 +396,7 @@ impl NativeWindow {
     /// Register a handler for the window close event.
     #[napi(ts_args_type = "callback: () => void")]
     pub fn on_close(&self, callback: CloseCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_close = Some(callback);
@@ -353,6 +408,7 @@ impl NativeWindow {
     /// Register a handler for window resize events.
     #[napi(ts_args_type = "callback: (width: number, height: number) => void")]
     pub fn on_resize(&self, callback: ResizeCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_resize = Some(callback);
@@ -364,6 +420,7 @@ impl NativeWindow {
     /// Register a handler for window move events.
     #[napi(ts_args_type = "callback: (x: number, y: number) => void")]
     pub fn on_move(&self, callback: MoveCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_move = Some(callback);
@@ -375,6 +432,7 @@ impl NativeWindow {
     /// Register a handler for window focus events.
     #[napi(ts_args_type = "callback: () => void")]
     pub fn on_focus(&self, callback: FocusCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_focus = Some(callback);
@@ -386,6 +444,7 @@ impl NativeWindow {
     /// Register a handler for window blur (lost focus) events.
     #[napi(ts_args_type = "callback: () => void")]
     pub fn on_blur(&self, callback: FocusCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_blur = Some(callback);
@@ -397,6 +456,7 @@ impl NativeWindow {
     /// Register a handler for page load events.
     #[napi(ts_args_type = "callback: (event: 'started' | 'finished', url: string) => void")]
     pub fn on_page_load(&self, callback: PageLoadCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_page_load = Some(callback);
@@ -408,6 +468,7 @@ impl NativeWindow {
     /// Register a handler for document title change events.
     #[napi(ts_args_type = "callback: (title: string) => void")]
     pub fn on_title_changed(&self, callback: TitleChangedCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_title_changed = Some(callback);
@@ -419,6 +480,7 @@ impl NativeWindow {
     /// Register a handler for the window reload event.
     #[napi(ts_args_type = "callback: () => void")]
     pub fn on_reload(&self, callback: ReloadCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_reload = Some(callback);
@@ -431,6 +493,7 @@ impl NativeWindow {
     /// Fired when a navigation is blocked by the `allowedHosts` restriction.
     #[napi(ts_args_type = "callback: (url: string) => void")]
     pub fn on_navigation_blocked(&self, callback: NavigationBlockedCallback) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
                 handlers.on_navigation_blocked = Some(callback);
@@ -445,6 +508,7 @@ impl NativeWindow {
     /// Requires `devtools: true` in {@link WindowOptions}.
     #[napi]
     pub fn open_devtools(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::OpenDevTools { id: self.id });
         });
@@ -454,6 +518,7 @@ impl NativeWindow {
     /// Close the browser devtools panel for this window's webview.
     #[napi]
     pub fn close_devtools(&self) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::CloseDevTools { id: self.id });
         });
@@ -463,6 +528,7 @@ impl NativeWindow {
     /// Check whether the devtools panel is currently open.
     #[napi]
     pub fn is_devtools_open(&self) -> Result<bool> {
+        self.ensure_open()?;
         let open = with_manager(|mgr| {
             mgr.platform
                 .as_ref()
@@ -475,27 +541,22 @@ impl NativeWindow {
     // ---- Cookie access ----
 
     /// Query cookies from the native cookie store.
-    /// Results are delivered asynchronously via the `onCookies` callback.
+    ///
+    /// Returns validated `CookieInfo` objects synchronously, including
+    /// `HttpOnly` cookies that are invisible to `document.cookie`.
+    ///
     /// If `url` is provided, only cookies matching that URL are returned.
-    /// If omitted, all cookies are returned.
+    /// If omitted, all cookies in the webview's cookie store are returned.
     #[napi]
-    pub fn get_cookies(&self, url: Option<String>) -> Result<()> {
+    pub fn get_cookies(&self, url: Option<String>) -> Result<Vec<CookieInfo>> {
+        self.ensure_open()?;
         with_manager(|mgr| {
-            mgr.push_command(Command::GetCookies { id: self.id, url });
-        });
-        Ok(())
-    }
-
-    /// Register a handler for cookie query results.
-    /// The callback receives a JSON string containing an array of cookie objects.
-    #[napi(ts_args_type = "callback: (cookies: string) => void")]
-    pub fn on_cookies(&self, callback: CookiesCallback) -> Result<()> {
-        with_manager(|mgr| {
-            if let Some(handlers) = mgr.event_handlers.get_mut(&self.id) {
-                handlers.on_cookies = Some(callback);
+            if let Some(ref plat) = mgr.platform {
+                Ok(plat.get_cookies_sync(self.id, url.as_deref()))
+            } else {
+                Ok(Vec::new())
             }
-        });
-        Ok(())
+        })
     }
 
     /// Clear cookies from the native cookie store.
@@ -503,6 +564,7 @@ impl NativeWindow {
     /// If omitted, all cookies in the webview's cookie store are cleared.
     #[napi]
     pub fn clear_cookies(&self, host: Option<String>) -> Result<()> {
+        self.ensure_open()?;
         with_manager(|mgr| {
             mgr.push_command(Command::ClearCookies { id: self.id, host });
         });
@@ -517,8 +579,10 @@ impl NativeWindow {
 /// security config leaks in the thread-local maps.
 impl Drop for NativeWindow {
     fn drop(&mut self) {
-        with_manager(|mgr| {
-            mgr.push_command(Command::Close { id: self.id });
-        });
+        if !self.closed {
+            with_manager(|mgr| {
+                mgr.push_command(Command::Close { id: self.id });
+            });
+        }
     }
 }

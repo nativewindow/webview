@@ -83,14 +83,12 @@ win.loadHtml("<h1>Hello</h1>");
 
 > **Security:** Never interpolate unsanitized user input into HTML strings. Use a sanitization library such as [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html](https://github.com/apostrophecms/sanitize-html). See the [Security guide](/security) for details.
 
-### `unsafe.evaluateJs(script: string): void`
+### `evaluateJs(script: string): void`
 
 Execute JavaScript in the webview context. This is fire-and-forget — there is no return value. Use `postMessage`/`onMessage` to send results back.
 
-Grouped under the `unsafe` namespace to signal injection risk.
-
 ```ts
-win.unsafe.evaluateJs('document.title = "Updated"');
+win.evaluateJs('document.title = "Updated"');
 ```
 
 > **Security:** Never pass unsanitized user input directly. Use [`sanitizeForJs()`](#sanitizeforjs) to escape strings. See the [Security guide](/security) for details.
@@ -181,12 +179,12 @@ win.onNavigationBlocked((url) => {
 
 ## Cookie Access
 
-### `getCookies(url?: string): Promise<CookieInfo[]>`
+### `getCookies(url?: string): CookieInfo[]`
 
-Query cookies from the native cookie store. Returns a Promise that resolves with validated `CookieInfo` objects, including `HttpOnly` cookies that are invisible to `document.cookie`.
+Query cookies from the native cookie store. Returns validated `CookieInfo` objects synchronously, including `HttpOnly` cookies that are invisible to `document.cookie`.
 
 ```ts
-const cookies = await win.getCookies("https://example.com");
+const cookies = win.getCookies("https://example.com");
 const session = cookies.find((c) => c.name === "session_id");
 if (session) {
   console.log("Session:", session.value, "HttpOnly:", session.httpOnly);
@@ -214,8 +212,8 @@ interface CookieInfo {
   path: string; // Path the cookie is restricted to
   httpOnly: boolean; // Whether the cookie is HttpOnly (inaccessible to JS)
   secure: boolean; // Whether the cookie requires HTTPS
-  sameSite: string; // SameSite policy: "none", "lax", or "strict"
-  expires: number; // Expiry as Unix timestamp (seconds); -1 for session cookies
+  sameSite: string | null; // SameSite policy: "Strict", "Lax", "None", or null
+  expires: number | null; // Expiry as Unix timestamp (seconds); null for session cookies
 }
 ```
 
@@ -229,7 +227,7 @@ Escape a string for safe embedding inside a JavaScript string literal. Handles b
 import { NativeWindow, sanitizeForJs } from "@nativewindow/webview";
 
 const userInput = 'He said "hello"\n<script>alert(1)</script>';
-win.unsafe.evaluateJs(`display("${sanitizeForJs(userInput)}")`);
+win.evaluateJs(`display("${sanitizeForJs(userInput)}")`);
 ```
 
 ### `checkRuntime(): RuntimeInfo`

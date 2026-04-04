@@ -23,10 +23,8 @@ function createMockWindow() {
     postMessage(msg: string) {
       posted.push(msg);
     },
-    unsafe: {
-      evaluateJs(script: string) {
-        evaluated.push(script);
-      },
+    evaluateJs(script: string) {
+      evaluated.push(script);
     },
     // Test helpers
     _simulateIncoming(msg: string, sourceUrl: string = "https://localhost") {

@@ -32,7 +32,7 @@ ch.window.onClose(() => {
 const waitUntilAuthenticated = async () => {
   console.log("[Bun] Waiting for session_id cookie...");
   while (true) {
-    const cookies = await ch.window.getCookies();
+    const cookies = ch.window.getCookies();
     if (cookies.some((it) => it.name === "ltoken_v2")) {
       console.log("[Bun] session_id cookie found, proceeding.");
       console.log(cookies.map((it) => it.name));

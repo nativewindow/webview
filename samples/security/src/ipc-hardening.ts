@@ -271,7 +271,7 @@ ch.on("ping", (msg) => {
   // Send feedback so the webview can count responses
   ch.send("feedback", `Accepted ping #${pingCount}: ${msg.slice(0, 40)}`);
   // Also update the webview's received count via evaluateJs
-  ch.window.unsafe.evaluateJs(`receivedCount = ${pingCount}`);
+  ch.window.evaluateJs(`receivedCount = ${pingCount}`);
 });
 
 ch.on("user-data", (data) => {

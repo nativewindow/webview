@@ -526,7 +526,7 @@ export function createChannel<H extends SchemaMap, C extends SchemaMap>(
     // trusted page load to avoid exposing the IPC bridge to
     // untrusted origins before the first navigation completes.
     if (!normalizedOrigins || normalizedOrigins.length === 0) {
-      win.unsafe.evaluateJs(getClientScript({ channelId: channelId || undefined }));
+      win.evaluateJs(getClientScript({ channelId: channelId || undefined }));
     }
 
     // Re-inject on every page load so the client survives navigation
@@ -538,7 +538,7 @@ export function createChannel<H extends SchemaMap, C extends SchemaMap>(
         if (!isOriginTrusted(url, normalizedOrigins)) return;
       }
 
-      win.unsafe.evaluateJs(getClientScript({ channelId: channelId || undefined }));
+      win.evaluateJs(getClientScript({ channelId: channelId || undefined }));
     });
   }
 

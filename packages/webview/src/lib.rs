@@ -1,8 +1,10 @@
+use napi::Env;
 use napi_derive::napi;
 
 mod events;
 mod options;
 mod platform;
+mod pump;
 mod runtime;
 pub mod security;
 mod window;
@@ -13,9 +15,9 @@ pub use runtime::*;
 
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 use window_manager::{
-    PENDING_BLURS, PENDING_CLOSES, PENDING_COOKIES, PENDING_FOCUSES, PENDING_MESSAGES,
-    PENDING_MOVES, PENDING_NAVIGATION_BLOCKED, PENDING_PAGE_LOADS, PENDING_RELOADS,
-    PENDING_RESIZE_CALLBACKS, PENDING_TITLE_CHANGES, is_origin_trusted, with_manager,
+    PENDING_BLURS, PENDING_CLOSES, PENDING_FOCUSES, PENDING_MESSAGES, PENDING_MOVES,
+    PENDING_NAVIGATION_BLOCKED, PENDING_PAGE_LOADS, PENDING_RELOADS, PENDING_RESIZE_CALLBACKS,
+    PENDING_TITLE_CHANGES, is_origin_trusted, with_manager,
 };
 
 /// Returns the origin of pages loaded via `loadHtml()`.
@@ -37,19 +39,17 @@ pub fn load_html_origin() -> String {
     }
 }
 
-/// Initialize the native window system.
-/// Must be called once before creating any windows.
+/// Escape a string for safe embedding inside a JavaScript string literal.
+///
+/// Handles backslashes, double quotes, newlines, carriage returns, null
+/// bytes, closing `</script>` tags, Unicode line/paragraph separators
+/// (U+2028, U+2029), backticks, and `${` template expressions.
+///
+/// Safe for use in double-quoted, single-quoted, and template literal
+/// contexts.
 #[napi]
-pub fn init() -> napi::Result<()> {
-    with_manager(|mgr| {
-        if mgr.initialized {
-            return Ok(());
-        }
-
-        mgr.platform = Some(platform::Platform::new()?);
-        mgr.initialized = true;
-        Ok(())
-    })
+pub fn sanitize_for_js(input: String) -> String {
+    security::sanitize_for_js(&input)
 }
 
 /// Process pending native UI events and execute queued commands.
@@ -60,12 +60,12 @@ pub fn init() -> napi::Result<()> {
 /// extracted from MANAGER so that event callbacks fired during command
 /// processing and event loop pumping can access MANAGER if needed.
 #[napi]
-pub fn pump_events() -> napi::Result<()> {
+pub fn pump_events(env: Env) -> napi::Result<()> {
     // Phase 1: drain commands and temporarily extract state
     let (commands, mut platform, mut event_handlers) = with_manager(|mgr| {
         if !mgr.initialized {
             return Err(napi::Error::from_reason(
-                "Native window system not initialized. Call init() first.",
+                "Native window system not initialized. Create a NativeWindow first.",
             ));
         }
         Ok((
@@ -97,6 +97,12 @@ pub fn pump_events() -> napi::Result<()> {
         // native objects whose teardown fails on Windows.
         plat.destroy_pending_closes();
 
+        // Update Dock visibility after all pending window destructions are
+        // complete.  This must run here — not inside pump_events() — because
+        // OS-initiated closes (CloseRequested) are only destroyed by
+        // destroy_pending_closes(), which runs after pump_events().
+        plat.update_dock_visibility();
+
         match first_err {
             Some(e) => Err(e),
             None => Ok(()),
@@ -106,13 +112,14 @@ pub fn pump_events() -> napi::Result<()> {
     };
 
     // Phase 3: put state back and flush deferred callbacks
-    with_manager(|mgr| {
+    let should_stop_pump = with_manager(|mgr| {
         mgr.platform = platform;
         mgr.event_handlers = event_handlers;
 
         // Snapshot which windows are pending close before flush drains
         // the buffer — we need the IDs for handler cleanup afterward.
         let closed_ids: Vec<u32> = PENDING_CLOSES.with(|p| p.borrow().clone());
+        let close_count = closed_ids.len() as u32;
 
         flush_pending_callbacks(&mgr.event_handlers);
 
@@ -121,7 +128,16 @@ pub fn pump_events() -> napi::Result<()> {
         for id in closed_ids {
             mgr.event_handlers.remove(&id);
         }
+
+        // Decrement window count; signal pump stop when the last window closes.
+        mgr.window_count = mgr.window_count.saturating_sub(close_count);
+        mgr.window_count == 0 && close_count > 0
     });
+
+    // Stop the pump outside with_manager() because stop_pump needs &Env.
+    if should_stop_pump {
+        pump::stop_pump(&env)?;
+    }
 
     result
 }
@@ -247,17 +263,6 @@ fn flush_pending_callbacks(
             && let Some(ref cb) = handlers.on_title_changed
         {
             cb.call(title, ThreadsafeFunctionCallMode::NonBlocking);
-        }
-    }
-
-    // Flush any cookie query results that were deferred during pump_events
-    let pending_cookies: Vec<(u32, String)> =
-        PENDING_COOKIES.with(|p| std::mem::take(&mut *p.borrow_mut()));
-    for (window_id, json) in pending_cookies {
-        if let Some(handlers) = event_handlers.get(&window_id)
-            && let Some(ref cb) = handlers.on_cookies
-        {
-            cb.call(json, ThreadsafeFunctionCallMode::NonBlocking);
         }
     }
 }

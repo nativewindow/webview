@@ -37,14 +37,14 @@ const userInput = '<img onerror="alert(1)" src=x>';
 win.loadHtml(`<p>${DOMPurify.sanitize(userInput)}</p>`);
 ```
 
-### Script Injection via `unsafe.evaluateJs()`
+### Script Injection via `evaluateJs()`
 
-If you interpolate user input into a script passed to `unsafe.evaluateJs()`, an attacker can execute arbitrary code in the webview:
+If you interpolate user input into a script passed to `evaluateJs()`, an attacker can execute arbitrary code in the webview:
 
 ```ts
 // DANGEROUS: user input is interpolated directly
 const userInput = '"; document.cookie; "';
-win.unsafe.evaluateJs(`display("${userInput}")`);
+win.evaluateJs(`display("${userInput}")`);
 ```
 
 **Mitigation:** Use `sanitizeForJs()` to escape strings:
@@ -53,7 +53,7 @@ win.unsafe.evaluateJs(`display("${userInput}")`);
 import { NativeWindow, sanitizeForJs } from "@nativewindow/webview";
 
 const userInput = '"; document.cookie; "';
-win.unsafe.evaluateJs(`display("${sanitizeForJs(userInput)}")`);
+win.evaluateJs(`display("${sanitizeForJs(userInput)}")`);
 // The input is safely escaped as a string literal
 ```
 
@@ -377,7 +377,7 @@ See the [NativeWindow API reference](/native-window#cookie-access) for usage det
 - **Use schemas for all events** — schemas keep your type definitions and validation logic in sync, reducing the chance of drift.
 - **Set a Content Security Policy** — use the `csp` option in `WindowOptions` to restrict what loaded content can do (inline scripts, resource origins, etc.).
 - **Use a sanitization library for user content in HTML** — prevent XSS when using `loadHtml()` with dynamic content. Use [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html](https://github.com/apostrophecms/sanitize-html).
-- **Use `sanitizeForJs()` for user content in scripts** — prevent injection when using `win.unsafe.evaluateJs()` with dynamic strings. This now also escapes backticks and template expressions.
+- **Use `sanitizeForJs()` for user content in scripts** — prevent injection when using `win.evaluateJs()` with dynamic strings. This also escapes backticks and template expressions.
 - **Set `trustedOrigins` when loading external URLs** — use the IPC-layer `trustedOrigins` in `ChannelOptions` to control client injection and message filtering, and/or the native-layer `trustedOrigins` in `WindowOptions` for defense-in-depth origin filtering at the Rust layer.
 - **Validate `sourceUrl` when using raw `onMessage`** — the native `onMessage` callback does not filter by origin at the raw level unless native-layer `trustedOrigins` is set. Check the `sourceUrl` parameter if you need origin-based security without typed channels.
 - **Treat the webview as an untrusted client** — apply the same input validation and sanitization you would for any client-server boundary.

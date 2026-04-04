@@ -6,6 +6,6 @@
     "emitDeclarationOnly": true,
     "declarationDir": "."
   },
-  "include": ["index.ts"],
+  "include": ["index.ts", "binding.ts"],
   "exclude": ["node_modules"]
 }

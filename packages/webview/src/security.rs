@@ -136,3 +136,57 @@ pub fn json_escape(s: &str) -> String {
     out.push('"');
     out
 }
+
+// ── sanitizeForJs ──────────────────────────────────────────────
+
+/// Escape a string for safe embedding inside a JavaScript string literal.
+///
+/// Handles backslashes, double quotes, newlines, carriage returns, null
+/// bytes, closing `</script>` tags, Unicode line/paragraph separators
+/// (U+2028, U+2029), backticks, and `${` template expressions.
+///
+/// Safe for use in double-quoted, single-quoted, and template literal
+/// contexts.
+pub fn sanitize_for_js(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        let c = chars[i];
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{2028}' => out.push_str("\\u2028"),
+            '\u{2029}' => out.push_str("\\u2029"),
+            '`' => out.push_str("\\`"),
+            '$' if i + 1 < len && chars[i + 1] == '{' => {
+                out.push_str("\\${");
+                i += 1; // skip the '{'
+            }
+            '<' => {
+                // Check for </script> (case-insensitive)
+                if i + 8 < len {
+                    let rest: String = chars[i..i + 9].iter().collect();
+                    if rest.eq_ignore_ascii_case("</script>") {
+                        out.push_str("<\\/script>");
+                        i += 8; // skip the rest of "</script>"
+                    } else {
+                        out.push(c);
+                    }
+                } else {
+                    out.push(c);
+                }
+            }
+            c if (c as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => out.push(c),
+        }
+        i += 1;
+    }
+    out
+}

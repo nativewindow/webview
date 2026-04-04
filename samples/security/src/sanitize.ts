@@ -5,7 +5,7 @@
  *
  * - **`sanitizeForJs()`** — escapes strings for safe embedding inside
  *   `evaluateJs()` calls, preventing script injection via crafted input.
- * - **`win.unsafe.evaluateJs()`** — the `unsafe` namespace makes injection
+ * - **`win.evaluateJs()`** — executes arbitrary JS in the webview context;
  *   risk visible at the call site, so code reviewers can easily spot it.
  * - **Frozen IPC bridge** — `window.ipc` is `Object.freeze()`d and defined
  *   as non-writable/non-configurable, preventing page scripts from
@@ -178,7 +178,7 @@ win.loadHtml(`
           win.onMessage((input) => {<br>
           &nbsp;&nbsp;// Safe: sanitized before injection<br>
           &nbsp;&nbsp;const safe = sanitizeForJs(input);<br>
-          &nbsp;&nbsp;win.unsafe.evaluateJs(<br>
+           &nbsp;&nbsp;win.evaluateJs(<br>
           &nbsp;&nbsp;&nbsp;&nbsp;\`showResult("\${safe}")\`<br>
           &nbsp;&nbsp;);<br>
           });<br>
@@ -267,12 +267,12 @@ win.onMessage((message: string) => {
   // Safe: sanitizeForJs() escapes the string for embedding in a JS literal.
   // The "unsafe" namespace makes the injection risk visible at the call site.
   const sanitized = sanitizeForJs(message);
-  win.unsafe.evaluateJs(`showResult("${sanitized}")`);
+  win.evaluateJs(`showResult("${sanitized}")`);
 
   console.log("[Bun] Injected sanitized result back into webview");
 
   // For comparison, this is what an UNSAFE version looks like (DO NOT DO THIS):
-  // win.unsafe.evaluateJs(`showResult("${message}")`);
+  // win.evaluateJs(`showResult("${message}")`);
   // ^ If message contains: "); alert("pwned"); ("
   //   it would execute: showResult(""); alert("pwned"); ("")
 });
