@@ -1,5 +1,13 @@
 # @nativewindow/react
 
+## 1.0.3
+
+### Patch Changes
+
+- fix peer dependencies
+- Updated dependencies
+  - @nativewindow/ipc@1.0.3
+
 ## 1.0.2
 
 ### Patch Changes

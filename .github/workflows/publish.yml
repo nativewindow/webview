@@ -18,8 +18,8 @@ jobs:
       publish_ipc_react: ${{ steps.check.outputs.publish_ipc_react }}
       publish_tsdb: ${{ steps.check.outputs.publish_tsdb }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
@@ -74,7 +74,7 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@stable
@@ -90,7 +90,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libjavascriptcoregtk-4.1-dev \
             libsoup-3.0-dev
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index/
@@ -101,7 +101,7 @@ jobs:
           restore-keys: cargo-${{ matrix.target }}-
       - run: bun napi build --release --platform --target ${{ matrix.target }}
         working-directory: packages/webview
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.target }}
           path: packages/webview/native-window.*.node
@@ -115,10 +115,10 @@ jobs:
       (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       # ---- @nativewindow/webview (conditional) ----
@@ -138,7 +138,7 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
         working-directory: packages/webview
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: needs.release.outputs.publish_native_window == 'true'
         with:
           path: packages/webview/artifacts
