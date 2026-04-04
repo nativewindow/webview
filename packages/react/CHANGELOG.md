@@ -1,5 +1,13 @@
 # @nativewindow/react
 
+## 1.0.6
+
+### Patch Changes
+
+- bump versions, fix multiwindow closing events
+- Updated dependencies
+  - @nativewindow/ipc@1.0.6
+
 ## 1.0.4
 
 ### Patch Changes

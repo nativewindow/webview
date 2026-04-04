@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/tsdb",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "TanStack DB collection adapter for native-window IPC (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {
@@ -52,7 +52,7 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@nativewindow/webview": "^1.0.4",
+    "@nativewindow/webview": "^1.0.6",
     "typescript": "^6.0.2"
   }
 }
