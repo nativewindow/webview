@@ -8,13 +8,13 @@ crate-type = ["cdylib"]
 
 [dependencies]
 napi = { version = "3", features = ["napi8"] }
-napi-derive = "3"
+napi-derive = "3.5.3"
 url = "2"
-tao = { version = "0.34.5", features = ["rwh_06"] }
+tao = { version = "0.35.0", features = ["rwh_06"] }
 # NOTE: The "devtools" feature is always compiled in. DevTools are disabled at
 # runtime by default (options.devtools defaults to false). Production deployments
 # should never enable devtools, as it grants full DOM/JS inspection access.
-wry = { version = "0.54.2", features = ["devtools", "protocol"] }
+wry = { version = "0.54.3", features = ["devtools", "protocol"] }
 http = "1"
 
 # Windows-only: kept for runtime.rs (WebView2 detection/install)
@@ -24,7 +24,7 @@ windows = { version = "0.61", features = ["Win32_System_Com"] }
 
 # Windows/Linux-only: icon loading (PNG/ICO decoding)
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-image = { version = "0.25", default-features = false, features = ["ico", "png"] }
+image = { version = "0.25.10", default-features = false, features = ["ico", "png"] }
 
 # macOS-only: raw NSApp event drain for reliable WebKit event processing
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -1,5 +1,11 @@
 # @nativewindow/webview
 
+## 1.0.3
+
+### Patch Changes
+
+- bump rust dependencies
+
 ## 1.0.2
 
 ### Patch Changes
