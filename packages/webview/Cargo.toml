@@ -14,7 +14,7 @@ tao = { version = "0.35.0", features = ["rwh_06"] }
 # NOTE: The "devtools" feature is always compiled in. DevTools are disabled at
 # runtime by default (options.devtools defaults to false). Production deployments
 # should never enable devtools, as it grants full DOM/JS inspection access.
-wry = { version = "0.54.3", features = ["devtools", "protocol"] }
+wry = { version = "0.55.0", features = ["devtools", "protocol"] }
 http = "1"
 
 # Windows-only: kept for runtime.rs (WebView2 detection/install)
