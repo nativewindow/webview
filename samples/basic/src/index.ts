@@ -7,10 +7,9 @@
  *
  * Run: bun samples/src/basic.ts
  *
- * This sample simulates a long-running background process: a heartbeat
- * setInterval keeps the process alive after the window closes, so you can
- * verify that the macOS Dock icon disappears cleanly on close while the
- * process itself stays running. Press Ctrl+C to quit.
+ * The window auto-closes after 10 s (with a countdown bar) or when the user
+ * closes it manually. On macOS, you can verify that the Dock icon disappears
+ * cleanly on close.
  */
 import { NativeWindow } from "@nativewindow/webview";
 
@@ -186,25 +185,24 @@ function openWindow() {
     win.postMessage(`Echo: ${sanitized}`);
   });
 
-  // Handle window close
-  win.onClose(() => {
-    clearInterval(heartbeat);
-    console.log("\n[Bun] Window closed — process still running (heartbeat active).");
-    console.log("[Bun] On macOS, the Dock icon should now be gone.");
-    console.log("[Bun] Press Ctrl+C to quit.");
-  });
-
   // Auto-close after 10 s to test Dock icon cleanup without manual interaction
-  setTimeout(() => {
+  const autoCloseTimeout = setTimeout(() => {
     console.log("\n[Bun] Auto-closing window after 10s...");
     win.close();
   }, 10_000);
+
+  // Handle window close (manual or auto)
+  win.onClose(() => {
+    clearInterval(heartbeat);
+    clearTimeout(autoCloseTimeout);
+    console.log("\n[Bun] Window closed.");
+    console.log("[Bun] On macOS, the Dock icon should now be gone.");
+  });
 
   return win;
 }
 
 openWindow();
 
-console.log("[Bun] Native window created. Close the window — the process will keep running.");
+console.log("[Bun] Native window created. Close the window or wait 10s for auto-close.");
 console.log("[Bun] On macOS, verify the Dock icon disappears after closing the window.");
-console.log("[Bun] Press Ctrl+C to quit.");

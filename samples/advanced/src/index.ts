@@ -63,7 +63,7 @@ todos.batch((b) => {
 
 // Simulate live updates from the host every 3 seconds
 let tickCount = 0;
-setInterval(() => {
+const tickInterval = setInterval(() => {
   tickCount++;
   const action = tickCount % 3;
 
@@ -120,6 +120,7 @@ ch.on("randomize", () => {
 // ── Lifecycle ────────────────────────────────────────────────────
 
 ch.window.onClose(() => {
+  clearInterval(tickInterval);
   console.log("[Bun] Window closed");
 });
 
