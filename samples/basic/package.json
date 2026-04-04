@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun src/index",
+    "dev:multiwindow": "bun src/multiwindow",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

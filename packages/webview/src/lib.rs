@@ -103,6 +103,14 @@ pub fn pump_events(env: Env) -> napi::Result<()> {
         // destroy_pending_closes(), which runs after pump_events().
         plat.update_dock_visibility();
 
+        // Flush any remaining platform events triggered by window
+        // destruction (orderOut, WebView teardown) and Dock visibility
+        // changes (activation policy → Accessory).  Without this, the
+        // last-window-close leaves a "not responding" ghost on macOS:
+        // the pump stops immediately after this cycle, so pending AppKit
+        // work from destroy + dock-hide never gets a run-loop iteration.
+        plat.flush_pending_visual_updates();
+
         match first_err {
             Some(e) => Err(e),
             None => Ok(()),
@@ -118,15 +126,19 @@ pub fn pump_events(env: Env) -> napi::Result<()> {
 
         // Snapshot which windows are pending close before flush drains
         // the buffer — we need the IDs for handler cleanup afterward.
-        let closed_ids: Vec<u32> = PENDING_CLOSES.with(|p| p.borrow().clone());
-        let close_count = closed_ids.len() as u32;
+        // Deduplicate: each window should only be counted once even if
+        // multiple close events arrived for the same ID in a single pump
+        // cycle (e.g. rapid OS close events or Command::Close + CloseRequested).
+        let unique_closed: std::collections::HashSet<u32> =
+            PENDING_CLOSES.with(|p| p.borrow().iter().copied().collect());
+        let close_count = unique_closed.len() as u32;
 
         flush_pending_callbacks(&mgr.event_handlers);
 
         // Clean up event handlers for all closed windows now that
         // callbacks have been dispatched.
-        for id in closed_ids {
-            mgr.event_handlers.remove(&id);
+        for id in &unique_closed {
+            mgr.event_handlers.remove(id);
         }
 
         // Decrement window count; signal pump stop when the last window closes.

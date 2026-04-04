@@ -278,8 +278,7 @@ if (!_entry) {
 }
 
 const _nativeBinding =
-  _tryRequire(`./${_entry.file}`) ?? // same directory (source / package root)
-  _tryRequire(`../${_entry.file}`) ?? // parent directory (when loaded from dist/)
+  _tryRequire(`../${_entry.file}`) ?? // package root (from src/ or dist/)
   _tryRequire(_entry.pkg); // per-platform npm package (production)
 
 if (!_nativeBinding) {

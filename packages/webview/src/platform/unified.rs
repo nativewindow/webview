@@ -226,11 +226,17 @@ impl Platform {
                 }
             }
             Command::Close { id } => {
-                self.destroy_window_entry(id);
-                // Event handlers are NOT removed here — they are cleaned
-                // up after flush_pending_callbacks so the JS on_close
-                // callback still fires.
-                capped_push!(PENDING_CLOSES, id, "PENDING_CLOSES");
+                // Only push to PENDING_CLOSES if the window actually existed
+                // and was destroyed.  This makes Command::Close idempotent —
+                // duplicate close commands (e.g. from Drop after an OS-initiated
+                // CloseRequested already destroyed the window) are harmlessly
+                // ignored, preventing window_count from being decremented twice.
+                if self.destroy_window_entry(id) {
+                    // Event handlers are NOT removed here — they are cleaned
+                    // up after flush_pending_callbacks so the JS on_close
+                    // callback still fires.
+                    capped_push!(PENDING_CLOSES, id, "PENDING_CLOSES");
+                }
             }
             Command::Focus { id } => {
                 if let Some(entry) = self.windows.get(&id) {
@@ -930,6 +936,23 @@ document.addEventListener('DOMContentLoaded', function () {{
             set_macos_activation_policy_accessory();
             self.dock_visible = false;
         }
+    }
+
+    /// Drain any remaining platform events to ensure visual changes from
+    /// window destruction and Dock visibility updates are fully processed.
+    ///
+    /// This is critical for the last-window-close case: `destroy_pending_closes`
+    /// calls `set_visible(false)` (orderOut) and drops the native Window/WebView,
+    /// while `update_dock_visibility` changes the activation policy to Accessory.
+    /// Both generate AppKit work that requires the run loop to process.
+    ///
+    /// For windows 1…N-1, that pending work is picked up by the *next* pump
+    /// cycle 16ms later. But when the last window closes, the pump stops
+    /// immediately — without this drain, the orderOut never takes visual
+    /// effect and the window stays on screen as a "not responding" ghost.
+    pub fn flush_pending_visual_updates(&self) {
+        #[cfg(target_os = "macos")]
+        self.drain_macos_events();
     }
 
     /// Drain remaining events and CFRunLoop sources after `run_return`.

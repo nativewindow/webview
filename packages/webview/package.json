@@ -37,8 +37,8 @@
     }
   },
   "scripts": {
-    "build": "napi build --release --platform && vite build",
-    "build:debug": "napi build --platform && vite build",
+    "build": "napi build --release --platform --no-js && rm -f index.d.ts && vite build",
+    "build:debug": "napi build --platform --no-js && rm -f index.d.ts && vite build",
     "build:ts": "vite build",
     "version": "napi version",
     "fuzz": "cargo +nightly fuzz list --fuzz-dir fuzz",

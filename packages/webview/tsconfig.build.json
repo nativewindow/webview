@@ -4,8 +4,8 @@
     "noEmit": false,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "declarationDir": "."
+    "rootDir": "src"
   },
-  "include": ["index.ts", "binding.ts"],
+  "include": ["src/index.ts"],
   "exclude": ["node_modules"]
 }

@@ -5,7 +5,7 @@ import dts from "vite-plugin-dts";
 export default defineConfig({
   build: {
     lib: {
-      entry: resolve(__dirname, "index.ts"),
+      entry: resolve(__dirname, "src/index.ts"),
       formats: ["es"],
       fileName: () => "index.js",
     },
@@ -22,6 +22,7 @@ export default defineConfig({
   plugins: [
     dts({
       tsconfigPath: "./tsconfig.build.json",
+      outDir: "dist",
     }),
   ],
 });
