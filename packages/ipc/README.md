@@ -115,16 +115,16 @@ Create a typed channel client inside the webview for use in bundled apps.
 
 ### Channel Options
 
-| Option                 | Type        | Default    | Description                            |
-| ---------------------- | ----------- | ---------- | -------------------------------------- |
+| Option                 | Type                                     | Default    | Description                                                                                   |
+| ---------------------- | ---------------------------------------- | ---------- | --------------------------------------------------------------------------------------------- |
 | `schemas`              | `{ host: SchemaMap; client: SchemaMap }` | _required_ | Directional schemas — `host` for events the host sends, `client` for events the webview sends |
-| `injectClient`         | `boolean`   | `true`     | Auto-inject client script into webview |
-| `onValidationError`    | `function`  | —          | Called when a payload fails validation |
-| `trustedOrigins`       | `string[]`  | —          | Restrict IPC to specific origins       |
-| `maxMessageSize`       | `number`    | `1048576`  | Max message size in bytes              |
-| `rateLimit`            | `number`    | —          | Max messages per second                |
-| `maxListenersPerEvent` | `number`    | —          | Max listeners per event type           |
-| `channelId`            | `string`    | —          | Unique channel identifier              |
+| `injectClient`         | `boolean`                                | `true`     | Auto-inject client script into webview                                                        |
+| `onValidationError`    | `function`                               | —          | Called when a payload fails validation                                                        |
+| `trustedOrigins`       | `string[]`                               | —          | Restrict IPC to specific origins                                                              |
+| `maxMessageSize`       | `number`                                 | `1048576`  | Max message size in bytes                                                                     |
+| `rateLimit`            | `number`                                 | —          | Max messages per second                                                                       |
+| `maxListenersPerEvent` | `number`                                 | —          | Max listeners per event type                                                                  |
+| `channelId`            | `string`                                 | —          | Unique channel identifier                                                                     |
 
 ### Schema Support
 

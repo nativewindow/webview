@@ -135,8 +135,10 @@ export interface TypedChannel<Send extends EventMap, Receive extends EventMap> {
  * The host sends events defined by the `host` schemas and receives
  * events defined by the `client` schemas.
  */
-export interface NativeWindowChannel<Send extends EventMap, Receive extends EventMap>
-  extends TypedChannel<Send, Receive> {
+export interface NativeWindowChannel<
+  Send extends EventMap,
+  Receive extends EventMap,
+> extends TypedChannel<Send, Receive> {
   /** The underlying NativeWindow instance. */
   readonly window: NativeWindow;
 }
