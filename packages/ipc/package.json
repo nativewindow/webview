@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/ipc",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Typesafe IPC channels for native-window (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {
@@ -54,7 +54,7 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@nativewindow/webview": "^1.0.0",
+    "@nativewindow/webview": "^1.0.4",
     "typescript": "^6.0.2",
     "zod": "^4.0.0"
   },

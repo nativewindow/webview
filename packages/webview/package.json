@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/webview",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Native OS webview windows for Bun & Node.js (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {
