@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/webview",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Native OS webview windows for Bun & Node.js (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {
@@ -34,26 +34,32 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
     "build": "napi build --release --platform && vite build",
     "build:debug": "napi build --platform && vite build",
     "build:ts": "vite build",
-    "version": "napi version"
+    "version": "napi version",
+    "fuzz": "cargo +nightly fuzz list --fuzz-dir fuzz",
+    "fuzz:json-escape": "cargo +nightly fuzz run fuzz_json_escape --fuzz-dir fuzz",
+    "fuzz:extract-origin": "cargo +nightly fuzz run fuzz_extract_origin --fuzz-dir fuzz",
+    "fuzz:host-matching": "cargo +nightly fuzz run fuzz_host_matching --fuzz-dir fuzz",
+    "fuzz:url-scheme": "cargo +nightly fuzz run fuzz_url_scheme --fuzz-dir fuzz"
   },
   "dependencies": {
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^3.0.0",
+    "@napi-rs/cli": "^3.6.0",
     "@types/bun": "^1.3.9",
-    "vite": "^7.3.1",
+    "vite": "^8.0.3",
     "vite-plugin-dts": "^4.5.4"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^6.0.2"
   },
   "optionalDependencies": {
     "@nativewindow/webview-darwin-arm64": "0.0.0",

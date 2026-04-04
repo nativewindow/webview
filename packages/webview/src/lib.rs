@@ -4,6 +4,7 @@ mod events;
 mod options;
 mod platform;
 mod runtime;
+pub mod security;
 mod window;
 mod window_manager;
 

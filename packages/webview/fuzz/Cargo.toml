@@ -1,0 +1,37 @@
+[package]
+name = "native-window-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+url = "2"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_json_escape"
+path = "fuzz_targets/fuzz_json_escape.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_extract_origin"
+path = "fuzz_targets/fuzz_extract_origin.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_host_matching"
+path = "fuzz_targets/fuzz_host_matching.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_url_scheme"
+path = "fuzz_targets/fuzz_url_scheme.rs"
+doc = false

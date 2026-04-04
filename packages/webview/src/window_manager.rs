@@ -7,6 +7,13 @@ use tao::event_loop::EventLoop;
 use crate::events::WindowEventHandlers;
 use crate::options::WindowOptions;
 
+// Re-export pure security functions so existing `use crate::window_manager::*`
+// paths continue to work without changing every call-site.
+pub use crate::security::{
+    extract_host, extract_origin, host_matches_pattern, is_navigation_scheme_blocked,
+    is_url_scheme_allowed, json_escape,
+};
+
 // ── Permission flags ───────────────────────────────────────────
 
 /// Per-window permission flags for platform callbacks.
@@ -282,44 +289,6 @@ pub fn remove_html_content(window_id: u32) {
     });
 }
 
-/// The custom protocol scheme used by `loadHtml()` content.
-const CUSTOM_SCHEME: &str = "nativewindow";
-
-/// Extract the origin (scheme + host + port) from a URL string using the
-/// WHATWG URL Standard (`url` crate). Returns `None` for malformed URLs or
-/// URLs with opaque origins (e.g. `file:`, `data:`, `blob:`).
-///
-/// The returned origin string is fully normalized:
-///   - Scheme and host are lowercased
-///   - Default ports are stripped (80 for http, 443 for https)
-///   - Userinfo is stripped
-///   - IPv6 addresses are handled correctly
-///
-/// **Custom scheme handling:** The `url` crate treats all non-special schemes
-/// (including our `nativewindow://`) as having opaque origins. We special-case
-/// the `nativewindow` scheme and manually construct `scheme://host` so that
-/// `trustedOrigins` matching works correctly on macOS/Linux where `loadHtml()`
-/// content is served at `nativewindow://localhost/`.
-pub fn extract_origin(raw: &str) -> Option<String> {
-    let parsed = url::Url::parse(raw).ok()?;
-    let origin = parsed.origin();
-    let serialized = origin.ascii_serialization();
-    if serialized != "null" {
-        return Some(serialized);
-    }
-    // The `url` crate treats custom schemes as having opaque origins.
-    // For our own custom protocol, manually construct the origin from
-    // the parsed scheme + host so that trustedOrigins matching works
-    // correctly on macOS/Linux where loadHtml() content is served at
-    // nativewindow://localhost/.
-    if parsed.scheme() == CUSTOM_SCHEME
-        && let Some(host) = parsed.host_str()
-    {
-        return Some(format!("{}://{}", parsed.scheme(), host));
-    }
-    None
-}
-
 /// Check if a source URL's origin matches any of the trusted origins for a window.
 /// Returns `true` if:
 ///   - No trusted origins are configured for this window (allow all, with warning), or
@@ -355,13 +324,6 @@ pub fn is_origin_trusted(window_id: u32, source_url: &str) -> bool {
 
 // ── Navigation host restriction ────────────────────────────────
 
-/// Extract the host (without port) from a URL string using the `url` crate.
-/// Returns `None` for URLs without a host (e.g., `about:blank`, `data:` URIs).
-fn extract_host(url: &str) -> Option<String> {
-    let parsed = url::Url::parse(url).ok()?;
-    parsed.host_str().map(|h| h.to_owned())
-}
-
 /// Check if a URL's host is permitted by the window's `allowedHosts` list.
 /// Returns `true` if:
 ///   - No `allowed_hosts` are configured for this window (allow all)
@@ -392,59 +354,11 @@ pub fn is_host_allowed(window_id: u32, url: &str) -> bool {
                 return true;
             }
             match extract_host(url) {
-                Some(host) => {
-                    let host_lower = host.to_lowercase();
-                    hosts.iter().any(|pattern| {
-                        let p = pattern.to_lowercase();
-                        if let Some(suffix) = p.strip_prefix('*') {
-                            // "*.example.com" → suffix = ".example.com"
-                            // Match: host ends with ".example.com"
-                            //    OR: host equals "example.com" (strip leading dot)
-                            host_lower.ends_with(suffix)
-                                || suffix
-                                    .strip_prefix('.')
-                                    .is_some_and(|bare| host_lower == bare)
-                        } else {
-                            host_lower == p
-                        }
-                    })
-                }
+                Some(host) => hosts.iter().any(|pattern| host_matches_pattern(&host, pattern)),
                 None => false, // No host extractable = blocked
             }
         } else {
             true // No allowed_hosts configured = allow all
         }
     })
-}
-
-// ── JSON helpers ────────────────────────────────────────────────
-
-/// Escape a string for safe embedding as a JSON string value in JavaScript.
-/// The returned string includes surrounding double quotes.
-///
-/// In addition to the standard JSON escapes, this also escapes:
-///   - `/` as `\/` to prevent `</script>` injection in HTML contexts
-///   - U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH SEPARATOR)
-///     which are valid JSON but terminate JS string literals
-pub fn json_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '/' => out.push_str("\\/"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{2028}' => out.push_str("\\u2028"),
-            '\u{2029}' => out.push_str("\\u2029"),
-            c if (c as u32) < 0x20 => {
-                out.push_str(&format!("\\u{:04x}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }

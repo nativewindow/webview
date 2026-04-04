@@ -40,6 +40,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Rust build output
 target
 
+# Fuzz testing artifacts
+packages/webview/fuzz/corpus
+packages/webview/fuzz/artifacts
+
 # Compiled TS output (native-window)
 packages/webview/index.js
 packages/webview/index.cjs

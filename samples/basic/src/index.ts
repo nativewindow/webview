@@ -188,6 +188,7 @@ function openWindow() {
 
   // Handle window close
   win.onClose(() => {
+    clearInterval(heartbeat);
     console.log("\n[Bun] Window closed — process still running (heartbeat active).");
     console.log("[Bun] On macOS, the Dock icon should now be gone.");
     console.log("[Bun] Press Ctrl+C to quit.");

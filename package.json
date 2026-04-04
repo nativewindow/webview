@@ -8,18 +8,19 @@
   "scripts": {
     "changeset": "changeset",
     "build": "turbo run build",
+    "format": "oxfmt packages && oxfmt samples",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.8",
-    "@types/bun": "^1.3.9",
-    "oxfmt": "^0.34.0",
-    "turbo": "^2.8.10"
+    "@changesets/cli": "^2.30.0",
+    "@types/bun": "^1.3.11",
+    "oxfmt": "^0.43.0",
+    "turbo": "^2.9.3"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^6.0.2"
   },
   "overrides": {
     "esbuild": "0.27.3",

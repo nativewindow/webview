@@ -1,5 +1,13 @@
 # @nativewindow/react
 
+## 1.0.2
+
+### Patch Changes
+
+- bump dependencies, add default export for webview, add fuzz testing
+- Updated dependencies
+  - @nativewindow/ipc@1.0.2
+
 ## 1.0.0
 
 ### Minor Changes

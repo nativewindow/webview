@@ -9,7 +9,7 @@ use crate::events::{
 use crate::options::WindowOptions;
 use crate::window_manager::{
     ALLOWED_HOSTS_MAP, Command, PERMISSIONS_MAP, PermissionFlags, TRUSTED_ORIGINS_MAP,
-    extract_origin, with_manager,
+    extract_origin, is_url_scheme_allowed, with_manager,
 };
 
 /// A native OS window with an embedded webview.
@@ -89,12 +89,8 @@ impl NativeWindow {
     #[napi]
     pub fn load_url(&self, url: String) -> Result<()> {
         let trimmed = url.trim().to_string();
-        let lower = trimmed.to_lowercase();
         // Allowlist: only permit safe schemes
-        if !lower.starts_with("http://")
-            && !lower.starts_with("https://")
-            && !lower.starts_with("nativewindow:")
-        {
+        if !is_url_scheme_allowed(&trimmed) {
             return Err(napi::Error::from_reason(
                 "Blocked: only http:, https:, and nativewindow: URLs are allowed in loadUrl(). \
                  Use evaluateJs() for script execution or loadHtml() for HTML content.",

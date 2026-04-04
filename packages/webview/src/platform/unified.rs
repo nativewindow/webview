@@ -23,7 +23,7 @@ use crate::window_manager::{
     Command, EVENT_LOOP, MAX_PENDING_EVENTS, PENDING_BLURS, PENDING_CLOSES, PENDING_COOKIES,
     PENDING_FOCUSES, PENDING_MESSAGES, PENDING_MOVES, PENDING_NAVIGATION_BLOCKED,
     PENDING_PAGE_LOADS, PENDING_RESIZE_CALLBACKS, PENDING_TITLE_CHANGES, is_host_allowed,
-    is_origin_trusted, json_escape,
+    is_navigation_scheme_blocked, is_origin_trusted, json_escape,
 };
 
 /// Maximum IPC message size (10 MB).
@@ -666,11 +666,7 @@ impl Platform {
                     return true;
                 }
                 // Block dangerous URL schemes
-                if lower.starts_with("javascript:")
-                    || lower.starts_with("file:")
-                    || lower.starts_with("data:")
-                    || lower.starts_with("blob:")
-                {
+                if is_navigation_scheme_blocked(&url) {
                     return false;
                 }
                 // Enforce allowedHosts
