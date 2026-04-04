@@ -4,7 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["*.node", "native-window.js", "native-window.d.ts", "dist/**"],
+      "outputs": ["*.node", "dist/**"],
       "inputs": [
         "src/**",
         "*.ts",

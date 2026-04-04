@@ -1,5 +1,11 @@
 # @nativewindow/webview
 
+## 1.0.5
+
+### Patch Changes
+
+- remove native-window.js
+
 ## 1.0.4
 
 ### Patch Changes

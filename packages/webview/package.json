@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/webview",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Native OS webview windows for Bun & Node.js (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {
@@ -23,8 +23,6 @@
   ],
   "files": [
     "dist",
-    "native-window.js",
-    "native-window.d.ts",
     "README.md",
     "LICENSE"
   ],
@@ -54,7 +52,7 @@
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.6.0",
-    "@types/bun": "^1.3.9",
+    "@types/node": "^25.5.2",
     "vite": "^8.0.3",
     "vite-plugin-dts": "^4.5.4"
   },
