@@ -20,6 +20,9 @@ The comparison below highlights where native-window fits and where a full framew
 | Typed IPC with schema validation                |      ✅       |    ❌    |   ❌    |      ❌      |       ❌       |
 | Multi-window support                            |      ✅       |    ✅    |   ✅    |      ✅      |       ❌       |
 | Custom protocol handler                         |      ✅       |    ✅    |   ✅    |      ❌      |       ❌       |
+| Incognito / private browsing mode               |      ✅       |    ❌    |   ❌    |      ❌      |       ❌       |
+| Programmatic DevTools control                   |      ✅       |    ✅    |   ✅    |      ❌      |       ❌       |
+| Cookie access (including HttpOnly)              |      ✅       |    ✅    |   ❌    |      ❌      |       ❌       |
 | macOS                                           |      ✅       |    ✅    |   ✅    |      ✅      |       ✅       |
 | Windows                                         |      ✅       |    ✅    |   ✅    |      ✅      |       ✅       |
 | Linux                                           |      ✅       |    ✅    |   ✅    |      ✅      |       ✅       |
@@ -61,7 +64,7 @@ Choose Neutralinojs when you want a lightweight app framework with its own proje
 
 The [webview](https://github.com/webview/webview) library provides a minimal C/C++ (and Go) API for creating a single webview window. It is simple and small (~1 MB), but limited — single window only, no typed IPC, no event callbacks beyond basic message passing, and no schema validation.
 
-native-window provides multi-window support, a full event system (resize, move, focus, blur, page load, title change), typed IPC with schema validation, cookie access, security hardening (CSP, origin filtering, URL blocking), and a React hooks integration — all as a napi-rs addon for Bun/Deno/Node.js.
+native-window provides multi-window support, a full event system (resize, move, focus, blur, page load, title change), typed IPC with schema validation, cookie access, incognito/private browsing mode, programmatic DevTools control, security hardening (CSP, origin filtering, URL blocking), and a React hooks integration — all as a napi-rs addon for Bun/Deno/Node.js.
 
 Choose webview when you need the simplest possible single-window webview from Go or C. Choose native-window when you need a richer API from Bun/Deno/Node.js.
 
@@ -73,4 +76,5 @@ native-window is the right fit when:
 - You are building **developer tools, CLI companions, plugin UIs, or automation dashboards** — not a full consumer application
 - You want **typed, schema-validated IPC** between host and webview out of the box
 - You want to **avoid bundling Chromium** and keep your tool lightweight
+- You need **incognito/private mode**, **cookie access**, or **programmatic DevTools** without framework overhead
 - You do not need app packaging, auto-updates, system tray, or native menus

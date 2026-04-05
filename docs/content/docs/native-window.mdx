@@ -60,6 +60,8 @@ All options are optional. Pass them to the `NativeWindow` constructor:
 | `allowCamera`     | `boolean`  | `false` | Allow the webview to access the camera. All camera requests are denied by default. See [Security guide](/security#permission-controls)                                                                                                                                   |
 | `allowMicrophone` | `boolean`  | `false` | Allow the webview to access the microphone. All microphone requests are denied by default. See [Security guide](/security#permission-controls)                                                                                                                           |
 | `allowFileSystem` | `boolean`  | `false` | Allow the webview to use the File System Access API (`showOpenFilePicker`, `showSaveFilePicker`, `showDirectoryPicker`). Windows only — WebKit does not support this API on macOS or Linux. See [Security guide](/security#permission-controls)                          |
+| `icon`            | `string`   | —       | Path to a PNG or ICO file for the window icon (title bar). On macOS this is silently ignored (macOS doesn't support per-window icons). Relative paths resolve from the working directory                                                                                 |
+| `incognito`       | `boolean`  | `false` | Run the webview in incognito (private) mode. No cookies, cache, or browsing data are persisted to disk. Each window starts with a clean, isolated session and all data is discarded when the window closes. See [Incognito Mode](#incognito-mode) for platform details    |
 
 ## Content Loading
 
@@ -113,6 +115,7 @@ win.postMessage("data from host");
 | `setResizable(resizable: boolean)`          | Enable or disable window resizing         |
 | `setDecorations(decorations: boolean)`      | Show or hide title bar and borders        |
 | `setAlwaysOnTop(alwaysOnTop: boolean)`      | Toggle always-on-top mode                 |
+| `setIcon(path: string)`                     | Set the window icon from a PNG or ICO file path. Silently ignored on macOS |
 
 ## Window State
 
@@ -216,6 +219,71 @@ interface CookieInfo {
   expires: number | null; // Expiry as Unix timestamp (seconds); null for session cookies
 }
 ```
+
+### `clearCookies(host?: string): void`
+
+Clear cookies from the native cookie store. If `host` is provided, only cookies whose domain matches that host are deleted. If omitted, all cookies in the webview's cookie store are cleared.
+
+```ts
+// Clear all cookies
+win.clearCookies();
+
+// Clear cookies for a specific host
+win.clearCookies("example.com");
+```
+
+## DevTools
+
+### `openDevtools(): void`
+
+Open the browser devtools panel for this window's webview. Requires `devtools: true` in `WindowOptions`.
+
+```ts
+const win = new NativeWindow({ title: "Debug", devtools: true });
+win.loadUrl("https://example.com");
+win.openDevtools();
+```
+
+### `closeDevtools(): void`
+
+Close the browser devtools panel for this window's webview.
+
+```ts
+win.closeDevtools();
+```
+
+### `isDevtoolsOpen(): boolean`
+
+Check whether the devtools panel is currently open.
+
+```ts
+if (win.isDevtoolsOpen()) {
+  console.log("DevTools are open");
+}
+```
+
+> **Security:** DevTools grant full DOM/JS inspection access. Only enable `devtools: true` during development; avoid enabling it in production to reduce the attack surface.
+
+## Incognito Mode
+
+Set `incognito: true` to run the webview in private/incognito mode. No cookies, cache, or other browsing data are persisted to disk. Each window starts with a clean, isolated session and all data is discarded when the window closes.
+
+```ts
+const win = new NativeWindow({
+  title: "Private Session",
+  incognito: true,
+});
+```
+
+Platform behavior:
+
+| Platform | Implementation                                                                  |
+| -------- | ------------------------------------------------------------------------------- |
+| macOS    | Uses `WKWebsiteDataStore.nonPersistentDataStore()` (WKWebView)                 |
+| Windows  | Enables `IsInPrivateModeEnabled` on the WebView2 controller                     |
+| Linux    | Uses a temporary in-memory WebContext (no persistent storage)                    |
+
+> **Tip:** Combine `incognito: true` with security features like `csp` and `trustedOrigins` for maximum isolation when loading untrusted content.
 
 ## Utility Functions
 

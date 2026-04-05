@@ -18,6 +18,19 @@ The project is split into four packages:
 
 You can use the core package alone for raw window management and message passing, add the IPC package for compile-time checked, type-safe communication between your host process and the webview, use the React hooks package if your webview app is built with React, or add the TanStack DB adapter to sync host-side data to reactive collections in the webview.
 
+### Key Capabilities
+
+- **Native webviews** — powered by [wry](https://github.com/tauri-apps/wry) + [tao](https://github.com/tauri-apps/tao) (WebKit on macOS/Linux, WebView2 on Windows), no Electron or Chromium bundled
+- **Multi-window** — create and manage multiple independent windows
+- **Bidirectional IPC** — send messages between Bun/Deno/Node.js and the webview
+- **Typesafe IPC channels** — typed message layer with schema-based validation and compile-time checked event maps
+- **Security hardening** — URL scheme blocking, CSP injection, trusted origin filtering, webview surface hardening, IPC bridge hardening, message size limits, and rate limiting
+- **Cookie access** — read (including `HttpOnly`) and clear cookies from the native cookie store
+- **DevTools control** — programmatically open, close, and query the browser devtools panel
+- **Incognito mode** — ephemeral sessions with no persistent storage (cookies, cache, local storage)
+- **Window icons** — set per-window icons from PNG or ICO files (Windows and Linux)
+- **Runtime detection** — check for WebView2 availability and auto-install on Windows
+
 ## Platform Support
 
 | Platform           | Webview Engine      | Status                                                                            |

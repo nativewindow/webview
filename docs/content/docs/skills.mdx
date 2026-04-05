@@ -1,0 +1,49 @@
+---
+title: Agent Skills
+description: Install AI coding skills to help your agent work with native-window
+---
+
+## What are Skills?
+
+Skills are reusable capabilities for AI coding agents. They provide deep, package-specific knowledge — architecture details, code patterns, naming conventions, and implementation guides — so your AI assistant can write correct code for native-window without trial and error.
+
+Each skill is a `SKILL.md` file that gets loaded into your agent's context when working on related code. Skills are managed by the open-source [skills CLI](https://skills.sh) from Vercel.
+
+## Available Skills
+
+| Skill | Description |
+| --- | --- |
+| `webview` | Rust + napi-rs native addon — command queue, platform code, thread safety, napi patterns |
+| `ipc` | Pure TypeScript typed IPC layer — envelope format, directional schemas, client injection |
+| `react` | React hooks for typed IPC — context providers, factory hooks, lifecycle management |
+| `tsdb` | TanStack DB adapter — host-to-webview data sync, wire protocol, collection options |
+
+## Installation
+
+Install all four skills at once using the `skills` CLI:
+
+```bash
+bunx skills add nativewindow/webview
+# or
+npx skills add nativewindow/webview
+# or
+pnpx skills add nativewindow/webview
+```
+
+This downloads the skill files and configures them for use with your AI agent.
+
+## What's Inside Each Skill
+
+Every skill includes:
+
+- **Package identity** — npm name, location, language, peer dependencies
+- **Architecture overview** — how the package works internally
+- **File structure** — what lives where and why
+- **Code patterns** — naming conventions, error handling, and style rules specific to the package
+- **Implementation guides** — step-by-step instructions for adding new features
+- **Testing instructions** — how to run and write tests
+
+## Learn More
+
+- [skills.sh](https://skills.sh) — browse the skills leaderboard and documentation
+- [skills CLI reference](https://skills.sh/docs/cli) — full CLI usage guide

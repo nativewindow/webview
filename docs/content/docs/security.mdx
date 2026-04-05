@@ -369,7 +369,34 @@ The `getCookies()` method on `NativeWindow` returns cookies from the native cook
 - **Do not log cookie values** in production — treat them with the same care as passwords or tokens
 - **Scope queries with a URL** — pass a URL to `getCookies("https://example.com")` to limit results to cookies matching that URL, rather than retrieving all cookies
 
+The `clearCookies()` method allows clearing cookies from the native cookie store. Pass a host to target specific cookies, or omit it to clear all cookies. This is useful for logout flows or session cleanup.
+
 See the [NativeWindow API reference](/native-window#cookie-access) for usage details.
+
+## Incognito Mode
+
+The `incognito` option in `WindowOptions` creates a webview with no persistent storage. No cookies, cache, local storage, or other browsing data are persisted to disk — the session is completely ephemeral and isolated.
+
+```ts
+const win = new NativeWindow({
+  title: "Private Session",
+  incognito: true,
+});
+```
+
+Security benefits:
+
+- **No data leakage between sessions** — each incognito window starts clean and all data is discarded on close
+- **Session isolation** — an incognito window cannot access cookies or storage from non-incognito windows
+- **Reduced forensic footprint** — no browsing artifacts are left on disk
+
+Incognito mode is especially useful when:
+
+- Loading untrusted or third-party content that should not persist state
+- Building tools that handle sensitive data (credentials, tokens) in the webview
+- Creating isolated preview windows that should not share state with the main application
+
+> **Note:** Incognito mode does not prevent the host process from observing or recording webview activity via IPC. It only prevents the webview engine itself from persisting data to disk.
 
 ## Best Practices
 
@@ -389,3 +416,6 @@ See the [NativeWindow API reference](/native-window#cookie-access) for usage det
 - **Set a `rateLimit` when loading untrusted content** — the `rateLimit` option in `ChannelOptions` prevents a malicious page from flooding the host with IPC messages. Choose a limit appropriate for your application's expected message frequency.
 - **Use `channelId` to namespace your channel** — setting `channelId: true` generates a random namespace prefix that prevents untrusted scripts from spoofing known event types. This is especially important when loading third-party content.
 - **Do not forward `HttpOnly` cookies to the webview** — `getCookies()` returns `HttpOnly` cookies from the native cookie store. Forwarding these values to the webview via IPC or `evaluateJs()` would defeat the browser's `HttpOnly` protection. Keep cookie data on the host side.
+- **Use `clearCookies()` for logout and cleanup** — call `clearCookies()` or `clearCookies(host)` to remove sensitive cookies when the user logs out or the window closes, especially in non-incognito windows.
+- **Use `incognito: true` for untrusted content** — incognito mode prevents the webview from persisting cookies, cache, or storage to disk. Use it when loading third-party or untrusted content, handling sensitive data, or when session isolation is required.
+- **Control DevTools access** — use `openDevtools()`, `closeDevtools()`, and `isDevtoolsOpen()` to manage devtools programmatically. Only enable `devtools: true` in development; disable it in production to reduce the attack surface.
