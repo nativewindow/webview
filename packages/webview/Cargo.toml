@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 napi = { version = "3", features = ["napi8"] }
 napi-derive = "3.5.3"
 url = "2"
-tao = { version = "0.35.0", features = ["rwh_06"] }
+tao = { version = "0.35.2", features = ["rwh_06"] }
 # NOTE: The "devtools" feature is always compiled in. DevTools are disabled at
 # runtime by default (options.devtools defaults to false). Production deployments
 # should never enable devtools, as it grants full DOM/JS inspection access.
