@@ -41,9 +41,9 @@ You can use the core package alone for raw window management and message passing
 
 ## How It Works
 
-The native addon uses [tao](https://github.com/tauri-apps/tao) for cross-platform windowing and [wry](https://github.com/tauri-apps/wry) for webview management, with a **command queue** architecture on top. When you call methods like `setTitle()` or `loadHtml()`, commands are enqueued and then drained on the main thread by `pumpEvents()`, which also pumps the OS event loop to keep windows responsive.
+The native addon uses [tao](https://github.com/tauri-apps/tao) for cross-platform windowing and [wry](https://github.com/tauri-apps/wry) for webview management, with a **command queue** architecture on top. When you call methods like `setTitle()` or `loadHtml()`, commands are enqueued and then drained on the main thread by the automatic event pump, which also pumps the OS event loop to keep windows responsive.
 
-The `NativeWindow` class manages this lifecycle automatically — it initializes the native subsystem on first window creation, starts pumping events at ~60fps, and stops when all windows are closed. You don't need to call `init()` or `pumpEvents()` manually.
+The `NativeWindow` class manages this lifecycle automatically — it initializes the native subsystem on first window creation, starts pumping events at ~60fps, and stops when all windows are closed.
 
 ## Next Steps
 

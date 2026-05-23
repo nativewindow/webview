@@ -39,10 +39,7 @@ Native OS webviews for Bun, Deno & Node.js. Create real desktop windows with emb
 ## Quick Start
 
 ```ts
-import { init, pumpEvents, NativeWindow } from "native-window";
-
-init();
-const pump = setInterval(() => pumpEvents(), 16);
+import { NativeWindow } from "native-window";
 
 const win = new NativeWindow({
   title: "My App",
@@ -61,7 +58,6 @@ win.onMessage((msg) => {
 });
 
 win.onClose(() => {
-  clearInterval(pump);
   process.exit(0);
 });
 ```
@@ -178,14 +174,6 @@ On macOS, both functions return `{ available: true }` immediately — WKWebView 
 ## API Reference
 
 ### `native-window`
-
-#### `init()`
-
-Initialize the native window system. Must be called once before creating any windows.
-
-#### `pumpEvents()`
-
-Process pending native UI events. Call periodically (~16ms via `setInterval`) to keep windows responsive.
 
 #### `checkRuntime(): RuntimeInfo`
 
@@ -343,7 +331,7 @@ bun test
 
 ## Known Limitations
 
-- **~16ms event latency** from the `pumpEvents()` polling interval
+- **~16ms event latency** from the automatic native event pump interval
 - **HTML null origin** — content loaded via `loadHtml()` has a null CORS origin; use a custom protocol or `loadUrl()` for fetch/XHR
 - **Windows 10** may require the [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) — use `ensureRuntime()` to auto-install (included by default on Windows 11)
 - **Linux** requires [WebKitGTK](https://webkitgtk.org/) to be installed (e.g. `libwebkit2gtk-4.1-dev` on Ubuntu/Debian)

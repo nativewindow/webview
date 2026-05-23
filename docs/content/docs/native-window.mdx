@@ -320,18 +320,9 @@ interface RuntimeInfo {
 }
 ```
 
-## Legacy API
-
-The following functions exist for backward compatibility but are **not needed** when using the `NativeWindow` class, which manages initialization and event pumping automatically:
-
-| Function       | Description                                  |
-| -------------- | -------------------------------------------- |
-| `init()`       | Initialize the native window system manually |
-| `pumpEvents()` | Process pending native UI events manually    |
-
 ## Known Limitations
 
-- **~16ms event latency** from the `pumpEvents()` polling interval
+- **~16ms event latency** from the automatic native event pump interval
 - **HTML origin differences** — content loaded via `loadHtml()` has a `https://nativewindow.localhost` origin on Windows and a `nativewindow://localhost` origin on macOS and Linux (both are secure contexts). When configuring `trustedOrigins`, use the platform-appropriate value.
 - **No return values from `unsafe.evaluateJs()`** — use `postMessage`/`onMessage` to send results back
 - **2 MB HTML limit on Windows** when using `loadHtml()`
