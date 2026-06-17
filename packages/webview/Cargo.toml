@@ -19,7 +19,7 @@ http = "1"
 
 # Windows-only: kept for runtime.rs (WebView2 detection/install)
 [target.'cfg(target_os = "windows")'.dependencies]
-webview2-com = "0.38"
+webview2-com = "0.39"
 windows = { version = "0.61", features = ["Win32_System_Com"] }
 
 # Windows/Linux-only: icon loading (PNG/ICO decoding)
