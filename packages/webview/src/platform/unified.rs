@@ -834,22 +834,13 @@ document.addEventListener('DOMContentLoaded', function () {{
 
     // ── Event loop pumping ─────────────────────────────────────
 
-    /// Pump the tao event loop (non-blocking). Processes all pending OS events
+    /// Pump the tao event loop. Processes pending OS events
     /// and pushes them to PENDING_* deferred callback buffers.
     ///
-    /// Uses a two-phase approach:
-    /// - Phase A: `run_return` dispatches tao-level events (WindowEvent, etc.)
-    /// - Phase B (macOS): drain non-input NSApp events + CFRunLoop sources
-    ///
-    /// Phase B is needed because tao's `run_return` processes one CFRunLoop
-    /// iteration via `[NSApp run]`, but WebKit operations (network → parse →
-    /// render) generate cascading events that need additional iterations.
-    /// Without the drain, each step waits 16ms for the next pump call.
-    /// Mouse and keyboard events are excluded from Phase B so that window
-    /// delegate callbacks (e.g. `windowShouldClose:`) only fire while tao's
-    /// event handler is active in Phase A.
+    /// On macOS, return to the host only after AppKit finishes tracking a
+    /// mouse gesture. Stopping its nested tracking loop cancels titlebar
+    /// button actions before mouse-up.
     pub fn pump_events(&mut self) {
-        // Phase A: tao event dispatch
         EVENT_LOOP.with(|el| {
             let mut event_loop_opt = el.borrow_mut().take();
             if let Some(ref mut event_loop) = event_loop_opt {
@@ -857,8 +848,8 @@ document.addEventListener('DOMContentLoaded', function () {{
                 let windows = &self.windows;
 
                 event_loop.run_return(|event, _target, control_flow| {
-                    // Ensure non-blocking from the start, regardless of any
-                    // stale ControlFlow persisted in tao's global Handler.
+                    // Keep macOS out of tao's persistent Exit state, which
+                    // also stops nested AppKit input tracking loops.
                     *control_flow = ControlFlow::Poll;
 
                     match event {
@@ -908,7 +899,12 @@ document.addEventListener('DOMContentLoaded', function () {{
                             }
                         }
                         Event::MainEventsCleared => {
-                            *control_flow = ControlFlow::Exit;
+                            #[cfg(target_os = "macos")]
+                            stop_macos_event_loop();
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                *control_flow = ControlFlow::Exit;
+                            }
                         }
                         _ => {}
                     }
@@ -917,10 +913,6 @@ document.addEventListener('DOMContentLoaded', function () {{
             // Put the event loop back
             *el.borrow_mut() = event_loop_opt;
         });
-
-        // Phase B: drain remaining platform events for WebKit processing
-        #[cfg(target_os = "macos")]
-        self.drain_macos_events();
     }
 
     /// Hide the macOS Dock icon when no windows remain open.
@@ -938,126 +930,60 @@ document.addEventListener('DOMContentLoaded', function () {{
         }
     }
 
-    /// Drain any remaining platform events to ensure visual changes from
-    /// window destruction and Dock visibility updates are fully processed.
-    ///
-    /// This is critical for the last-window-close case: `destroy_pending_closes`
-    /// calls `set_visible(false)` (orderOut) and drops the native Window/WebView,
-    /// while `update_dock_visibility` changes the activation policy to Accessory.
-    /// Both generate AppKit work that requires the run loop to process.
-    ///
-    /// For windows 1…N-1, that pending work is picked up by the *next* pump
-    /// cycle 16ms later. But when the last window closes, the pump stops
-    /// immediately — without this drain, the orderOut never takes visual
-    /// effect and the window stays on screen as a "not responding" ghost.
+    /// Apply visual updates after hiding windows and changing Dock visibility.
+    /// Pumping CoreFoundation here would run tao's observers without its event
+    /// handler and interfere with AppKit input tracking.
     pub fn flush_pending_visual_updates(&self) {
         #[cfg(target_os = "macos")]
-        self.drain_macos_events();
+        if let Some(mtm) = objc2_foundation::MainThreadMarker::new() {
+            objc2_app_kit::NSApplication::sharedApplication(mtm).updateWindows();
+        }
     }
+}
 
-    /// Drain remaining events and CFRunLoop sources after `run_return`.
-    ///
-    /// WebKit (WKWebView) relies on **both** NSApp events and CFRunLoop
-    /// sources (GCD dispatch queues, Mach port notifications) for internal
-    /// processing.  tao's `run_return` processes one event-loop iteration
-    /// then exits via `[NSApp stop:]`, leaving pending work unprocessed.
-    /// Without this drain, each cascading WebKit step waits 16ms for the
-    /// next pump call, causing visible content-rendering delays.
-    ///
-    /// This method alternates between:
-    ///   1. Draining immediately-available **non-input** NSApp events
-    ///   2. Processing one pending CFRunLoop source (`CFRunLoopRunInMode`)
-    ///      …until both queues are empty.
-    ///
-    /// **Important:** Mouse and keyboard events are excluded from the drain
-    /// mask.  They must be processed exclusively through tao's `run_return`
-    /// (Phase A) so that tao's event handler is active when window delegate
-    /// callbacks fire.  Processing a close-button click via `sendEvent:`
-    /// outside `run_return` triggers `windowShouldClose:` while tao's
-    /// handler is inactive — the resulting `CloseRequested` event is lost
-    /// and the window never closes.
-    #[cfg(target_os = "macos")]
-    fn drain_macos_events(&self) {
-        use objc2_app_kit::{NSApplication, NSEventMask};
-        use objc2_foundation::{MainThreadMarker, NSDate, NSDefaultRunLoopMode};
+/// Yield to the host without stopping a mouse gesture or nested AppKit loop.
+/// Keep tao in Poll mode: its Exit state persists across run_return calls and
+/// would otherwise stop a subsequent tracking loop before mouse-up.
+#[cfg(target_os = "macos")]
+fn stop_macos_event_loop() {
+    use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType};
+    use objc2_foundation::{MainThreadMarker, NSDefaultRunLoopMode, NSPoint, NSRunLoop};
 
-        // Raw FFI to CoreFoundation for processing GCD/Mach-port sources.
-        // CoreFoundation.framework is always linked on macOS — no extra dep.
-        unsafe extern "C" {
-            unsafe static kCFRunLoopDefaultMode: *const std::ffi::c_void;
-            unsafe fn CFRunLoopRunInMode(
-                mode: *const std::ffi::c_void,
-                seconds: f64,
-                return_after_source_handled: u8,
-            ) -> i32;
-        }
-        /// `CFRunLoopRunInMode` return value when a source was dispatched.
-        const K_CF_RUN_LOOP_RUN_HANDLED_SOURCE: i32 = 4;
-        /// Safety cap to prevent unbounded looping if sources keep
-        /// generating more work.
-        const MAX_DRAIN_ITERATIONS: usize = 500;
-
-        unsafe {
-            let Some(mtm) = MainThreadMarker::new() else {
-                eprintln!(
-                    "[native-window] drain_macos_events called from non-main thread; skipping"
-                );
-                return;
-            };
-            let app = NSApplication::sharedApplication(mtm);
-
-            // Mask that includes everything EXCEPT mouse and keyboard events.
-            // User input events stay in the queue for the next `run_return`.
-            let user_input = NSEventMask::LeftMouseDown
-                | NSEventMask::LeftMouseUp
-                | NSEventMask::RightMouseDown
-                | NSEventMask::RightMouseUp
-                | NSEventMask::MouseMoved
-                | NSEventMask::LeftMouseDragged
-                | NSEventMask::RightMouseDragged
-                | NSEventMask::MouseEntered
-                | NSEventMask::MouseExited
-                | NSEventMask::KeyDown
-                | NSEventMask::KeyUp
-                | NSEventMask::FlagsChanged
-                | NSEventMask::ScrollWheel
-                | NSEventMask::OtherMouseDown
-                | NSEventMask::OtherMouseUp
-                | NSEventMask::OtherMouseDragged;
-            let drain_mask = NSEventMask::Any - user_input;
-
-            for _ in 0..MAX_DRAIN_ITERATIONS {
-                let mut did_work = false;
-
-                // ── Phase 1: drain non-input NSApp events ──────────────
-                loop {
-                    let event = app.nextEventMatchingMask_untilDate_inMode_dequeue(
-                        drain_mask,
-                        Some(&NSDate::distantPast()),
-                        NSDefaultRunLoopMode,
-                        true,
-                    );
-                    match event {
-                        Some(evt) => {
-                            app.sendEvent(&evt);
-                            did_work = true;
-                        }
-                        None => break,
-                    }
-                }
-
-                // ── Phase 2: process one pending CFRunLoop source ──────
-                // (GCD dispatch blocks, Mach-port notifications, timers)
-                let result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.0, 1);
-                if result == K_CF_RUN_LOOP_RUN_HANDLED_SOURCE {
-                    did_work = true;
-                }
-
-                if !did_work {
-                    break;
-                }
-            }
-        }
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    // pressedMouseButtons is system-wide; only defer for this app's gesture.
+    let is_mouse_down = app.currentEvent().is_some_and(|event| {
+        matches!(
+            event.r#type(),
+            NSEventType::LeftMouseDown | NSEventType::RightMouseDown | NSEventType::OtherMouseDown
+        )
+    });
+    if is_mouse_down && NSEvent::pressedMouseButtons() != 0 {
+        return;
+    }
+    let is_default_mode = NSRunLoop::currentRunLoop()
+        .currentMode()
+        .is_some_and(|mode| unsafe { mode.isEqualToString(NSDefaultRunLoopMode) });
+    if !is_default_mode {
+        return;
+    }
+    app.stop(None);
+    // As in tao's own exit path, post an event so stop: takes effect without
+    // waiting for the next user interaction.
+    if let Some(event) = NSEvent::otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_subtype_data1_data2(
+        NSEventType::ApplicationDefined,
+        NSPoint::new(0.0, 0.0),
+        NSEventModifierFlags::empty(),
+        0.0,
+        0,
+        None,
+        0,
+        0,
+        0,
+    ) {
+        app.postEvent_atStart(&event, true);
     }
 }
 

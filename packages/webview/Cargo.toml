@@ -26,7 +26,7 @@ windows = { version = "0.62.2", features = ["Win32_System_Com"] }
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 image = { version = "0.25.10", default-features = false, features = ["ico", "png"] }
 
-# macOS-only: raw NSApp event drain for reliable WebKit event processing
+# macOS-only: AppKit event pumping, activation policy, and menu integration
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = "0.3"

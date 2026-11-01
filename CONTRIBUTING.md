@@ -65,6 +65,8 @@ pnpm run test:native
 
 Clippy checks all addon targets with the locked dependencies and treats Rust warnings as errors. The native smoke check imports the compiled wrapper and addon in Node without opening a window; CI runs it after the native build.
 
+For macOS event-loop changes, restart the advanced sample with the rebuilt addon. Check the red Close, yellow Minimize, and green Fullscreen buttons with ordinary mouse clicks. Also run `node samples/basic/src/multiwindow.ts`, close windows one at a time, and check that the remaining windows respond and the Dock icon disappears after the last close. Stop the sample's background logging with Ctrl+C when finished.
+
 The native targets are macOS ARM64/x64, Windows ARM64/x64, and Linux ARM64/x64. Linux builds require GTK 3 and WebKitGTK 4.1 development libraries. CI and publishing install those libraries where needed.
 
 ## Samples and docs
