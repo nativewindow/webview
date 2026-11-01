@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/webview-linux-arm64-gnu",
-  "version": "0.0.0",
+  "version": "1.0.7",
   "description": "Native window addon for Linux ARM64",
   "repository": {
     "type": "git",

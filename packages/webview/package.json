@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/webview",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Native OS webview windows for Bun & Node.js (beta)",
   "homepage": "https://nativewindow.fcannizzaro.com",
   "bugs": {
@@ -64,12 +64,12 @@
     "typescript": "^6.0.2"
   },
   "optionalDependencies": {
-    "@nativewindow/webview-darwin-arm64": "0.0.0",
-    "@nativewindow/webview-darwin-x64": "0.0.0",
-    "@nativewindow/webview-linux-arm64-gnu": "0.0.0",
-    "@nativewindow/webview-linux-x64-gnu": "0.0.0",
-    "@nativewindow/webview-win32-arm64-msvc": "0.0.0",
-    "@nativewindow/webview-win32-x64-msvc": "0.0.0"
+    "@nativewindow/webview-darwin-arm64": "1.0.7",
+    "@nativewindow/webview-darwin-x64": "1.0.7",
+    "@nativewindow/webview-linux-arm64-gnu": "1.0.7",
+    "@nativewindow/webview-linux-x64-gnu": "1.0.7",
+    "@nativewindow/webview-win32-arm64-msvc": "1.0.7",
+    "@nativewindow/webview-win32-x64-msvc": "1.0.7"
   },
   "napi": {
     "binaryName": "native-window",

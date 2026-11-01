@@ -1,6 +1,6 @@
 {
   "name": "@nativewindow/webview-win32-x64-msvc",
-  "version": "0.0.0",
+  "version": "1.0.7",
   "description": "Native window addon for Windows x64",
   "repository": {
     "type": "git",
