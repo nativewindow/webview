@@ -37,5 +37,7 @@ napi-build = "2"
 
 [profile.release]
 lto = true
-strip = "symbols"
+# Stripping can produce misaligned Mach-O LINKEDIT sections on macOS.
+# https://github.com/rust-lang/rust/issues/157750
+strip = "none"
 overflow-checks = true
