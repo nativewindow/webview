@@ -15,7 +15,7 @@ description: Install native-window and create your first native window
 Install the core package:
 
 ```bash
-bun add @nativewindow/webview
+pnpm add @nativewindow/webview
 # or
 deno add npm:@nativewindow/webview
 ```
@@ -23,7 +23,7 @@ deno add npm:@nativewindow/webview
 For typed IPC channels (optional):
 
 ```bash
-bun add @nativewindow/ipc
+pnpm add @nativewindow/ipc
 # or
 deno add npm:@nativewindow/ipc
 ```
@@ -31,7 +31,7 @@ deno add npm:@nativewindow/ipc
 If your webview app uses React, add the hooks package for idiomatic React integration:
 
 ```bash
-bun add @nativewindow/react
+pnpm add @nativewindow/react
 # or
 deno add npm:@nativewindow/react
 ```
@@ -39,7 +39,7 @@ deno add npm:@nativewindow/react
 If you use `native-window-ipc`, a schema library is **required** — schemas provide both TypeScript types and runtime validation for every IPC event. [Zod](https://zod.dev) is recommended, but [Valibot](https://valibot.dev) and any library implementing `safeParse()` also work. See [Supported Schema Libraries](/ipc#supported-schema-libraries) for details.
 
 ```bash
-bun add zod
+pnpm add zod
 # or
 deno add npm:zod
 ```

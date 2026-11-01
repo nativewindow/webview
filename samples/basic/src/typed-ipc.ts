@@ -5,7 +5,7 @@
  * all incoming payloads. TypeScript types are inferred from schemas
  * automatically — no separate type definition needed.
  *
- * Run: bun samples/src/typed-ipc.ts
+ * Run: node samples/basic/src/typed-ipc.ts
  */
 import { z } from "zod";
 import { createWindow } from "@nativewindow/ipc";

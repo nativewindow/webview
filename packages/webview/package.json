@@ -37,24 +37,26 @@
     }
   },
   "scripts": {
-    "build": "napi build --release --platform --no-js && rm -f index.d.ts && vite build",
-    "build:debug": "napi build --platform --no-js && rm -f index.d.ts && vite build",
-    "build:ts": "vite build",
+    "build": "napi build --release --platform --no-js && node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('index.d.ts', { force: true });\" && vp build",
+    "build:debug": "napi build --platform --no-js && node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('index.d.ts', { force: true });\" && vp build",
+    "build:ts": "vp build",
     "version": "napi version",
     "fuzz": "cargo +nightly fuzz list --fuzz-dir fuzz",
     "fuzz:json-escape": "cargo +nightly fuzz run fuzz_json_escape --fuzz-dir fuzz",
     "fuzz:extract-origin": "cargo +nightly fuzz run fuzz_extract_origin --fuzz-dir fuzz",
     "fuzz:host-matching": "cargo +nightly fuzz run fuzz_host_matching --fuzz-dir fuzz",
-    "fuzz:url-scheme": "cargo +nightly fuzz run fuzz_url_scheme --fuzz-dir fuzz"
+    "fuzz:url-scheme": "cargo +nightly fuzz run fuzz_url_scheme --fuzz-dir fuzz",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^3.6.0",
-    "@types/node": "^25.5.2",
-    "vite": "^8.0.3",
-    "vite-plugin-dts": "^4.5.4"
+    "@napi-rs/cli": "^3.10.9",
+    "@types/node": "^24.19.2",
+    "vite": "catalog:",
+    "vite-plugin-dts": "^5.1.2",
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "typescript": "^6.0.2"

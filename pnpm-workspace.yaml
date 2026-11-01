@@ -1,0 +1,20 @@
+packages:
+  - packages/*
+  - packages/webview/npm/*
+  - samples/*
+  - samples/advanced/webapp
+  - docs
+
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.4.0
+  vite-plus: 1.4.0
+overrides:
+  serve>compression: ^1.8.2
+  vite@*: 'catalog:'
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: '*'

@@ -7,7 +7,7 @@
  * - The event pump keeps running until the last window closes
  * - Dock icon disappears cleanly once the last window is gone
  *
- * Run: bun samples/basic/src/multiwindow.ts
+ * Run: node samples/basic/src/multiwindow.ts
  *
  * Instructions:
  *   1. Four windows appear, each with a distinct colour.

@@ -1,140 +1,81 @@
 # Contributing to native-window
 
-Thanks for your interest in contributing! This guide covers everything you need to get started.
-
 ## Prerequisites
 
-- [Bun](https://bun.sh) v1.3 or later
-- [Rust](https://rustup.rs) stable toolchain (for the native addon)
-- **macOS** or **Windows** (required for native compilation — the native addon cannot be built on Linux)
-- TypeScript 5+
+- Node.js 24.19.0, pinned in `.node-version`
+- pnpm 10.34.9, pinned in the root `package.json`
+- Rust stable for native addon work
+- macOS, Windows, or Linux with the required WebKitGTK development libraries
+
+Vite+ supplies Vite, Vitest, Oxlint, Oxfmt, and the workspace task runner. A global `vp` installation is optional. Package scripts use the locally pinned toolchain through pnpm. Bun remains a supported consumer runtime.
 
 ## Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/nativewindow/webview.git
-cd native-window
-
-# Install dependencies (links workspace packages automatically)
-bun install
+cd webview
+pnpm install --frozen-lockfile
 ```
 
-## Agent & MCP
+Run installation from the repository root. The libraries, samples, platform binary packages, and docs share `pnpm-workspace.yaml` and `pnpm-lock.yaml`.
 
-- [exocommand](https://github.com/fcannizzaro/exocommand) — MCP server that exposes shell commands as tools for AI coding assistants. Required to allow agents to run Rust native compilation (`cargo build`) and linting (`cargo clippy`) through the defined `.exocommand` configuration.
+## Project structure
 
-## Project Structure
+- `packages/webview`: Rust napi-rs addon, wry/tao backend, TypeScript entry point
+- `packages/ipc`: typed host and webview IPC channels
+- `packages/react`: React hooks and provider
+- `packages/tsdb`: host data source and TanStack DB collection adapter
+- `samples/basic`, `samples/security`: TypeScript host examples
+- `samples/advanced/webapp`: Vite web application embedded by the advanced host
+- `docs`: Next.js/Fumadocs static documentation site
 
-```
-native-window/
-├── packages/
-│   ├── native-window/            # Rust napi-rs native addon
-│   │   ├── src/                  # Rust source code
-│   │   │   ├── lib.rs            # Module entry: init(), pumpEvents()
-│   │   │   ├── window.rs         # NativeWindow class (#[napi])
-│   │   │   ├── window_manager.rs # Global state, command queue
-│   │   │   ├── options.rs        # WindowOptions struct
-│   │   │   ├── events.rs         # Event callback types
-│   │   │   └── platform/
-│   │   │       ├── macos.rs      # macOS: WKWebView + AppKit
-│   │   │       └── windows.rs    # Windows: WebView2 + Win32
-│   │   ├── Cargo.toml
-│   │   ├── build.rs
-│   │   ├── native-window.d.ts    # TypeScript type declarations
-│   │   └── index.ts              # TS entry point + NativeWindow wrapper class
-│   └── native-window-ipc/        # Pure TypeScript typed IPC layer
-│       ├── index.ts              # Host-side: createChannel, createWindow
-│       ├── client.ts             # Webview-side: createChannelClient
-│       └── tests/
-│           └── channel.test.ts   # Unit tests
-└── samples/
-    ├── basic.ts                  # Raw IPC example
-    └── typed-ipc.ts              # Typed IPC channel example
-```
-
-## Building the Native Addon
+## Checks without native compilation
 
 ```bash
-cd packages/webview
-
-# Release build (optimized, stripped)
-bun run build
-
-# Debug build (faster compilation, includes debug symbols)
-bun run build:debug
+pnpm run build:ts
+pnpm test
+pnpm run typecheck
+pnpm run lint
+pnpm run format
 ```
 
-This compiles the Rust code into a `.node` native addon for your current platform. The build targets are:
+Build the TypeScript packages before checking consumers, which resolve workspace packages through their emitted declarations. Tests mock the native boundary and do not need a native binary. Vite+ discovers the IPC, React, and TSDB test projects from the root `vite.config.ts`.
 
-| Target                    | Platform              |
-| ------------------------- | --------------------- |
-| `aarch64-apple-darwin`    | macOS (Apple Silicon) |
-| `x86_64-apple-darwin`     | macOS (Intel)         |
-| `x86_64-pc-windows-msvc`  | Windows (x64)         |
-| `aarch64-pc-windows-msvc` | Windows (ARM64)       |
+The root Vite+ config owns shared formatting. Markdown and MDX keep their existing prose formatting. `pnpm run lint` uses Oxlint; existing warnings are reported without suppressions.
 
-## Running Tests
+## Native addon
 
-The `native-window-ipc` package has unit tests for the typed channel layer:
+For local development:
 
 ```bash
-cd packages/ipc
-bun run test
+pnpm --filter @nativewindow/webview run build
+pnpm --filter @nativewindow/webview run build:debug
 ```
 
-Tests use a mock `NativeWindow` implementation, so they run on any platform (no native addon needed).
+Both commands compile the addon and build its TypeScript wrapper. `pnpm run build:ts` only builds TypeScript.
 
-When adding new features to the IPC layer, add corresponding tests in `tests/channel.test.ts`.
+Agents must follow `AGENTS.md`: native builds, Clippy, and Rust formatting go through the configured [exocommand](https://github.com/fcannizzaro/exocommand) tools, not direct shell commands. `.exocommand` defines `build-native-addon`, `clippy-native-addon`, and `fmt-native-addon`.
 
-## Running Samples
+The native targets are macOS ARM64/x64, Windows ARM64/x64, and Linux ARM64/x64. Linux builds require GTK 3 and WebKitGTK 4.1 development libraries. CI and publishing install those libraries where needed.
 
-Samples require the native addon to be built first (`bun run build` in `packages/webview`).
+## Samples and docs
+
+Build the native addon and TypeScript libraries first, then run:
 
 ```bash
-# Basic raw IPC demo
-bun samples/basic.ts
-
-# Typed IPC channel demo
-bun samples/typed-ipc.ts
+pnpm --filter basic-sample dev
+node samples/basic/src/typed-ipc.ts
+pnpm --filter security-sample dev
+pnpm --filter advanced-sample build-webapp
+pnpm --filter advanced-sample dev
+pnpm --filter docs dev
+pnpm --filter docs build
 ```
 
-## Development Workflow
+Node runs these TypeScript hosts directly. Local imports need explicit `.ts` extensions. Use `node --watch` when developing a host; native changes require restarting the process.
 
-1. **Native addon changes** (Rust):
-   - Edit files in `packages/webview/src/`
-   - Run `bun run build:debug` to compile
-   - Test with `bun samples/basic.ts`
-   - Use `bun --watch samples/basic.ts` for automatic restarts (not `--hot` — native addons require a process restart)
+## Changes and releases
 
-2. **IPC layer changes** (TypeScript):
-   - Edit `packages/ipc/index.ts` or `client.ts`
-   - Run `bun test` in the package directory
-   - Test with `bun samples/typed-ipc.ts`
+Keep IPC pure TypeScript with zero runtime dependencies. Add behavior tests to the affected package and update public API documentation when changing contracts. Rust changes need native checks on the supported platforms.
 
-3. **Adding a new window method**:
-   - Add the command variant in `src/window_manager.rs` (`Command` enum)
-   - Add the `#[napi]` method in `src/window.rs`
-   - Implement platform handling in `src/platform/macos.rs` and `src/platform/windows.rs`
-   - Update `native-window.d.ts` with the new type declaration
-
-4. **Adding a new IPC event type**:
-   - Add the callback type in `src/events.rs`
-   - Add the field to `WindowEventHandlers`
-   - Add the `#[napi]` handler registration method in `src/window.rs`
-   - Update `native-window.d.ts`
-
-## Code Style
-
-- **Rust**: use `rustfmt` defaults. Run `cargo fmt` before committing.
-- **TypeScript**: strict mode enabled. No external runtime dependencies in `native-window-ipc`.
-- Keep the IPC package **pure TypeScript** — it should never import native modules or platform-specific code.
-- Use JSDoc comments on all public exports.
-
-## Pull Requests
-
-- Use a descriptive title that summarizes the change
-- Keep each PR focused on a single concern
-- Add tests for new IPC features
-- Update `native-window.d.ts` when changing the native addon's public API
-- Test on at least one supported platform (macOS or Windows) for native changes
+Use `pnpm changeset` for release notes. The publish workflow builds packages, synchronizes native platform versions, and publishes pnpm-packed tarballs with npm provenance. Workspace development dependencies are not consumer runtime dependencies.

@@ -10,7 +10,7 @@ React hooks for [native-window-ipc](https://github.com/nativewindow/webview/tree
 ## Install
 
 ```bash
-bun add @nativewindow/react
+pnpm add @nativewindow/react
 # or
 deno add npm:@nativewindow/react
 ```

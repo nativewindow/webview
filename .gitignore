@@ -1,4 +1,4 @@
-# dependencies (bun install)
+# dependencies (pnpm install)
 node_modules
 
 # output
@@ -27,6 +27,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 .turbo
+.vitest
+.vite-hooks
+.vite-plus
 
 # IntelliJ based IDEs
 .idea

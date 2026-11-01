@@ -15,7 +15,7 @@
  * interpolating any external or user-provided strings into `evaluateJs()`.
  * The `unsafe` namespace exists to remind developers of this requirement.
  *
- * Run: bun samples/security/src/sanitize.ts
+ * Run: node samples/security/src/sanitize.ts
  */
 import { NativeWindow, sanitizeForJs } from "@nativewindow/webview";
 

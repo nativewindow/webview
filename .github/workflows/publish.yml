@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: .node-version
           registry-url: https://registry.npmjs.org
       - id: check
         name: Check which packages need publishing
@@ -43,7 +43,7 @@ jobs:
 
           check_version "packages/webview" "@nativewindow/webview" "publish_native_window"
           check_version "packages/ipc" "@nativewindow/ipc" "publish_ipc"
-          check_version "packages/ipc-react" "@nativewindow/react" "publish_ipc_react"
+          check_version "packages/react" "@nativewindow/react" "publish_ipc_react"
           check_version "packages/tsdb" "@nativewindow/tsdb" "publish_tsdb"
 
           # should_publish is true if any package needs publishing
@@ -75,8 +75,12 @@ jobs:
             runner: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -99,7 +103,7 @@ jobs:
             packages/webview/target/
           key: cargo-${{ matrix.target }}-${{ hashFiles('packages/webview/Cargo.lock') }}
           restore-keys: cargo-${{ matrix.target }}-
-      - run: bun napi build --release --platform --target ${{ matrix.target }}
+      - run: pnpm exec napi build --release --platform --target ${{ matrix.target }}
         working-directory: packages/webview
       - uses: actions/upload-artifact@v7
         with:
@@ -116,15 +120,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build TypeScript packages
+        run: pnpm run build:ts
       # ---- @nativewindow/webview (conditional) ----
       - name: Sync platform package versions
         if: needs.release.outputs.publish_native_window == 'true'
-        run: bunx napi version
+        run: pnpm exec napi version
         working-directory: packages/webview
       - name: Sync optionalDependencies versions
         if: needs.release.outputs.publish_native_window == 'true'
@@ -144,7 +151,7 @@ jobs:
           path: packages/webview/artifacts
       - name: Move artifacts to platform packages
         if: needs.release.outputs.publish_native_window == 'true'
-        run: bunx napi artifacts
+        run: pnpm exec napi artifacts
         working-directory: packages/webview
       - name: Copy README to webview
         run: cp README.md packages/webview/
@@ -153,7 +160,7 @@ jobs:
         run: ls -R packages/webview/npm/
       - name: Build webview (ts)
         if: needs.release.outputs.publish_native_window == 'true'
-        run: bun run build:ts
+        run: pnpm run build:ts
         working-directory: packages/webview
       # ---- Common ----
       - name: Copy LICENSE to packages
@@ -165,39 +172,39 @@ jobs:
         if: needs.release.outputs.publish_native_window == 'true'
         run: |
           for dir in packages/webview/npm/*/; do
-            npm publish "$dir" --access public --provenance
+            (cd "$dir" && pnpm pack && npm publish ./*.tgz --access public --provenance)
           done
       # ---- @nativewindow/webview (conditional) ----
       - name: Publish @nativewindow/webview
         if: needs.release.outputs.publish_native_window == 'true'
-        run: npm publish --access public --provenance
+        run: pnpm pack && npm publish ./*.tgz --access public --provenance
         working-directory: packages/webview
       # ---- @nativewindow/ipc (conditional) ----
       - name: Build @nativewindow/ipc
         if: needs.release.outputs.publish_ipc == 'true'
-        run: bun run build
+        run: pnpm run build
         working-directory: packages/ipc
       - name: Publish @nativewindow/ipc
         if: needs.release.outputs.publish_ipc == 'true'
-        run: npm publish --access public --provenance
+        run: pnpm pack && npm publish ./*.tgz --access public --provenance
         working-directory: packages/ipc
       # ---- @nativewindow/react (conditional) ----
       - name: Build @nativewindow/react
         if: needs.release.outputs.publish_ipc_react == 'true'
-        run: bun run build
+        run: pnpm run build
         working-directory: packages/react
       - name: Publish @nativewindow/react
         if: needs.release.outputs.publish_ipc_react == 'true'
-        run: npm publish --access public --provenance
+        run: pnpm pack && npm publish ./*.tgz --access public --provenance
         working-directory: packages/react
       # ---- @nativewindow/tsdb (conditional) ----
       - name: Build @nativewindow/tsdb
         if: needs.release.outputs.publish_tsdb == 'true'
-        run: bun run build
+        run: pnpm run build
         working-directory: packages/tsdb
       - name: Publish @nativewindow/tsdb
         if: needs.release.outputs.publish_tsdb == 'true'
-        run: npm publish --access public --provenance
+        run: pnpm pack && npm publish ./*.tgz --access public --provenance
         working-directory: packages/tsdb
       - name: Create GitHub Release
         if: needs.release.outputs.publish_native_window == 'true'

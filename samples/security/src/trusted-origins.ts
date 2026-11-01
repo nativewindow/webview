@@ -19,7 +19,7 @@
  * origin for the current platform (`nativewindow://localhost` on macOS/Linux,
  * `https://nativewindow.localhost` on Windows).
  *
- * Run: bun samples/security/src/trusted-origins.ts
+ * Run: node samples/security/src/trusted-origins.ts
  */
 import { z } from "zod";
 import { createWindow } from "@nativewindow/ipc";

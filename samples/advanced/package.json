@@ -3,20 +3,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun src/index",
-    "build-webapp": "tsc -b webapp && vite build webapp",
+    "dev": "node src/index.ts",
+    "build-webapp": "pnpm --dir webapp run build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@nativewindow/ipc": "workspace:*",
     "@nativewindow/tsdb": "workspace:*",
     "@nativewindow/webview": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.9",
-    "@types/node": "^25.5.2",
-    "vite-plugin-singlefile": "^2.3.2"
+    "@types/node": "^24.19.2"
   },
   "peerDependencies": {
     "typescript": "^6.0.2"

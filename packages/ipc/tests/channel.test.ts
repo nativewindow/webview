@@ -1,6 +1,9 @@
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, vi } from "vite-plus/test";
 import { createChannel, getClientScript } from "../index.ts";
 import type { SchemaLike } from "../index.ts";
+
+// The channel tests supply their own window and never load a native binary.
+vi.mock("@nativewindow/webview", () => ({ NativeWindow: vi.fn() }));
 
 // ── Mock NativeWindow ─────────────────────────────────────────────
 

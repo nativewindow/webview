@@ -19,7 +19,7 @@
  * @security This sample shows the recommended production configuration.
  * Adjust limits and policies to match your application's requirements.
  *
- * Run: bun samples/security/src/index.ts
+ * Run: node samples/security/src/index.ts
  */
 import { z } from "zod";
 import { createWindow } from "@nativewindow/ipc";

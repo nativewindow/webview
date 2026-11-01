@@ -11,7 +11,7 @@
  * Each card shows a rich, interactive result when the API is granted:
  * live camera preview, real-time microphone volume meter, etc.
  *
- * Run: bun samples/security/src/sandbox.ts
+ * Run: node samples/security/src/sandbox.ts
  */
 import { NativeWindow } from "@nativewindow/webview";
 

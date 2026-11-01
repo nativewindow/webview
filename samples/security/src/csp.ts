@@ -15,7 +15,7 @@
  * A production policy should be as restrictive as possible while still
  * allowing the application to function.
  *
- * Run: bun samples/security/src/csp.ts
+ * Run: node samples/security/src/csp.ts
  */
 import { NativeWindow } from "@nativewindow/webview";
 

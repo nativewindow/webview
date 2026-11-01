@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 import dts from "vite-plugin-dts";
 
 export default defineConfig({
@@ -19,10 +19,10 @@ export default defineConfig({
       ],
     },
   },
-  plugins: [
+  plugins: lazyPlugins(() => [
     dts({
       tsconfigPath: "./tsconfig.build.json",
       outDir: "dist",
     }),
-  ],
+  ]),
 });

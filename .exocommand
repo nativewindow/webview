@@ -2,7 +2,7 @@
 
 build-native-addon:
   description: "Build the native window module"
-  command: "bun napi build --release --platform && bun vite build 2>&1"
+  command: "pnpm run build 2>&1"
   cwd: ./packages/webview
 
 fmt-native-addon:

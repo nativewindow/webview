@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { createDataSource } from "../index.ts";
 import { nativeWindowCollectionOptions } from "../client.ts";
 import type { DataSource, MessageSender } from "../index.ts";

@@ -13,7 +13,7 @@
 
 ## Project Overview
 
-Bun workspace monorepo providing native OS webview windows for Bun/Node.js. The native addon is built with Rust + napi-rs. The typed IPC layer is pure TypeScript.
+pnpm workspace monorepo providing native OS webview windows for Bun/Node.js. The native addon is built with Rust + napi-rs. The typed IPC layer is pure TypeScript.
 
 ## Project Structure
 
@@ -45,14 +45,14 @@ samples/
 
 | Task                    | Command                    | Working Directory            |
 | ----------------------- | -------------------------- | ---------------------------- |
-| Install deps            | `bun install`              | repo root                    |
-| Build addon (release)   | `bun run build`            | `packages/webview`     |
-| Build addon (debug)     | `bun run build:debug`      | `packages/webview`     |
+| Install deps            | `pnpm install --frozen-lockfile`              | repo root                    |
+| Build addon (release)   | `pnpm run build`            | `packages/webview`     |
+| Build addon (debug)     | `pnpm run build:debug`      | `packages/webview`     |
 | Format Rust             | `cargo fmt`                | `packages/webview`     |
 | Lint Rust               | `cargo clippy`             | `packages/webview`     |
-| Run all tests           | `vitest run`               | `packages/ipc` |
-| Run single test by name | `vitest run -t "pattern"`  | `packages/ipc` |
-| Run sample              | `bun samples/src/basic.ts` | repo root                    |
+| Run all tests           | `pnpm exec vp test run`               | `packages/ipc` |
+| Run single test by name | `pnpm exec vp test run -t "pattern"`  | `packages/ipc` |
+| Run sample              | `pnpm --filter basic-sample dev` | repo root                    |
 
 ## Testing
 
@@ -68,7 +68,7 @@ samples/
 ### Formatting
 
 - **2-space indentation**, double quotes, always semicolons, trailing commas in multi-line lists.
-- No formatter (Prettier/ESLint) is configured; follow existing style manually.
+- Vite+ provides Oxfmt and Oxlint; shared settings live in the root `vite.config.ts`. Run `pnpm run format` and `pnpm run lint`.
 
 ### Imports
 

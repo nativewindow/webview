@@ -12,7 +12,7 @@
  * @security **Example only.** In production, restrict `allowedHosts` to
  * your own domains and use wildcards sparingly.
  *
- * Run: bun samples/security/src/allowed-hosts.ts
+ * Run: node samples/security/src/allowed-hosts.ts
  */
 import { NativeWindow } from "@nativewindow/webview";
 

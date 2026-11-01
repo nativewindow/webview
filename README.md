@@ -288,7 +288,8 @@ See the [Security documentation](https://native-window.dev/docs/security) for th
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) (v1.3+), [Deno](https://deno.com) (v2+), or [Node.js](https://nodejs.org) (v18+)
+- [Node.js](https://nodejs.org) 24.19.0, as pinned in `.node-version`
+- [pnpm](https://pnpm.io) 10.34.9, as pinned in `package.json`
 - [Rust](https://rustup.rs) (stable)
 - macOS, Windows, or Linux (for native compilation)
 - On Linux: WebKitGTK development headers (e.g. `libwebkit2gtk-4.1-dev` on Ubuntu/Debian)
@@ -296,37 +297,37 @@ See the [Security documentation](https://native-window.dev/docs/security) for th
 ### Install dependencies
 
 ```bash
-bun install
-# or
-deno install
+pnpm install --frozen-lockfile
 ```
 
 ### Build the native addon
 
 ```bash
 cd packages/webview
-bun run build          # release build
-bun run build:debug    # debug build
+pnpm run build          # release build
+pnpm run build:debug    # debug build
 ```
 
-The build targets the current platform. Cross-compilation targets are configured in `packages/webview/package.json` under `napi.triples`.
+The build targets the current platform. Cross-compilation targets are configured in `packages/webview/package.json` under `napi.targets`.
 
 ## Samples
 
 ```bash
 # Raw IPC example
-bun samples/basic.ts
+pnpm --filter basic-sample dev
 
 # Typed IPC example
-bun samples/typed-ipc.ts
+node samples/basic/src/typed-ipc.ts
 ```
 
 ## Testing
 
 ```bash
-# Run the IPC channel tests
-cd packages/ipc
-bun test
+# Run all TypeScript tests without compiling the native addon
+pnpm test
+pnpm run build:ts
+pnpm run typecheck
+pnpm run lint
 ```
 
 ## Known Limitations
@@ -337,7 +338,7 @@ bun test
 - **Linux** requires [WebKitGTK](https://webkitgtk.org/) to be installed (e.g. `libwebkit2gtk-4.1-dev` on Ubuntu/Debian)
 - **No return values from `unsafe.evaluateJs()`** — use `postMessage`/`onMessage` to send results back
 - **2 MB HTML limit on Windows** when using `loadHtml()`
-- **Use `bun --watch`** instead of `bun --hot` for development (native addon reloading requires a process restart)
+- Use `node --watch` for development. Native addon changes require a process restart.
 
 ## License
 

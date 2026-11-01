@@ -5,7 +5,7 @@
  * validation and sanitization. This sample echoes messages for demonstration
  * purposes; a real application should validate all incoming data.
  *
- * Run: bun samples/src/basic.ts
+ * Run: node samples/basic/src/index.ts
  *
  * The window auto-closes after 10 s (with a countdown bar) or when the user
  * closes it manually. On macOS, you can verify that the Dock icon disappears

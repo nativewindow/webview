@@ -10,7 +10,7 @@
 ## Install
 
 ```bash
-bun add @nativewindow/tsdb
+pnpm add @nativewindow/tsdb
 # or
 deno add npm:@nativewindow/tsdb
 ```

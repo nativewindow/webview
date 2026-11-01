@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { defineConfig } from "vitest/config";
+import { defineConfig, lazyPlugins } from "vite-plus";
 import dts from "vite-plugin-dts";
 
 export default defineConfig({
@@ -25,5 +25,5 @@ export default defineConfig({
       external: ["react", "react/jsx-runtime", "@nativewindow/ipc", "@nativewindow/ipc/client"],
     },
   },
-  plugins: [dts({ tsconfigPath: "./tsconfig.build.json" }) as any],
+  plugins: lazyPlugins(() => [dts({ tsconfigPath: "./tsconfig.build.json" })]),
 });

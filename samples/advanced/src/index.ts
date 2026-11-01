@@ -1,7 +1,7 @@
 import { createWindow } from "@nativewindow/ipc";
 import { createDataSource } from "@nativewindow/tsdb";
 import { readFile } from "fs/promises";
-import { schemas } from "./schemas";
+import { schemas } from "./schemas.ts";
 
 // ── Security ─────────────────────────────────────────────────────
 // This sample enables several IPC security features as best-practice

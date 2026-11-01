@@ -10,7 +10,7 @@ Pure TypeScript typesafe IPC channel layer for [native-window](https://github.co
 ## Install
 
 ```bash
-bun add @nativewindow/ipc
+pnpm add @nativewindow/ipc
 # or
 deno add npm:@nativewindow/ipc
 ```

@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vite-plus/test";
 import { renderHook, act } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import type { TypedChannel } from "@nativewindow/ipc";

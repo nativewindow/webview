@@ -14,7 +14,7 @@
  * @security **Example only.** The limits here are intentionally low for
  * demonstration. Tune these values based on your application's needs.
  *
- * Run: bun samples/security/src/ipc-hardening.ts
+ * Run: node samples/security/src/ipc-hardening.ts
  */
 import { z } from "zod";
 import { createWindow } from "@nativewindow/ipc";

@@ -8,11 +8,8 @@ It is a Next.js app with [Static Export](https://nextjs.org/docs/app/guides/stat
 Run development server:
 
 ```bash
-npm run dev
-# or
-pnpm dev
-# or
-yarn dev
+pnpm install --frozen-lockfile # from the repository root
+pnpm --filter docs dev
 ```
 
 Open http://localhost:3000 with your browser to see the result.
