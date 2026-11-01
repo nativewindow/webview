@@ -60,3 +60,6 @@ opencode.json
 packages/webview/index.js
 packages/webview/index.cjs
 packages/webview/index.d.ts
+
+# Local review plans
+/plans/
