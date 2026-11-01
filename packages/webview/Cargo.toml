@@ -10,17 +10,17 @@ crate-type = ["cdylib"]
 napi = { version = "3", features = ["napi8"] }
 napi-derive = "3.5.3"
 url = "2"
-tao = { version = "0.35.0", features = ["rwh_06"] }
+tao = { version = "0.37.2", features = ["rwh_06"] }
 # NOTE: The "devtools" feature is always compiled in. DevTools are disabled at
 # runtime by default (options.devtools defaults to false). Production deployments
 # should never enable devtools, as it grants full DOM/JS inspection access.
-wry = { version = "0.54.3", features = ["devtools", "protocol"] }
+wry = { version = "0.57.1", features = ["devtools"] }
 http = "1"
 
 # Windows-only: kept for runtime.rs (WebView2 detection/install)
 [target.'cfg(target_os = "windows")'.dependencies]
-webview2-com = "0.38"
-windows = { version = "0.61", features = ["Win32_System_Com"] }
+webview2-com = "0.39.1"
+windows = { version = "0.62.2", features = ["Win32_System_Com"] }
 
 # Windows/Linux-only: icon loading (PNG/ICO decoding)
 [target.'cfg(not(target_os = "macos"))'.dependencies]
