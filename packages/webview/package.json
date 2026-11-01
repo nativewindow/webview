@@ -46,7 +46,9 @@
     "fuzz:extract-origin": "cargo +nightly fuzz run fuzz_extract_origin --fuzz-dir fuzz",
     "fuzz:host-matching": "cargo +nightly fuzz run fuzz_host_matching --fuzz-dir fuzz",
     "fuzz:url-scheme": "cargo +nightly fuzz run fuzz_url_scheme --fuzz-dir fuzz",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:native": "cargo clippy --locked --all-targets -- -D warnings",
+    "format:native": "cargo fmt --all"
   },
   "dependencies": {
     "zod": "^4.6.7"

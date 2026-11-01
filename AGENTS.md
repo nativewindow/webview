@@ -2,11 +2,12 @@
 
 ## Important Constraints
 
-- Do **not** run `bun run build`. You may run tests (for typescript).
-- Do **not** install Rust packages (`cargo install`, `cargo add`) or build the native addon, update only the `cargo.toml`.
-- To **build the addon** use the tool `execute("build-native-addon")`.
-- To **run clippy** use the tool `execute("clippy-native-addon")`.
-- To **run fmt** use the tool `execute("fmt-native-addon")`.
+- Use pnpm for project commands; ExoCommand is not required.
+- Do **not** install Rust tools or add dependencies with `cargo install` or `cargo add`.
+- To **build the addon**, run `pnpm run build:native` from the repo root.
+- To **run Clippy**, run `pnpm run lint:native` from the repo root.
+- To **format Rust**, run `pnpm run format:native` from the repo root.
+- After building the addon, run `pnpm run test:native` to verify Node can load it.
 - After every new feature or fix remember to run both the linter, fmt and the native addon build.
 - The `native-window-ipc` package must remain **pure TypeScript** with zero runtime dependencies.
 - Always fix all rust warnings
@@ -48,8 +49,8 @@ samples/
 | Install deps            | `pnpm install --frozen-lockfile`              | repo root                    |
 | Build addon (release)   | `pnpm run build`            | `packages/webview`     |
 | Build addon (debug)     | `pnpm run build:debug`      | `packages/webview`     |
-| Format Rust             | `cargo fmt`                | `packages/webview`     |
-| Lint Rust               | `cargo clippy`             | `packages/webview`     |
+| Format Rust             | `pnpm run format:native` | repo root |
+| Lint Rust               | `pnpm run lint:native` | repo root |
 | Run all tests           | `pnpm exec vp test run`               | `packages/ipc` |
 | Run single test by name | `pnpm exec vp test run -t "pattern"`  | `packages/ipc` |
 | Run sample              | `pnpm --filter basic-sample dev` | repo root                    |

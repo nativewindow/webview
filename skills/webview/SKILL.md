@@ -231,9 +231,9 @@ pub fn some_method(&self, arg: String) -> Result<()> {
 
 | Task              | Command                                |
 | ----------------- | -------------------------------------- |
-| Build addon       | Use `execute("build-native-addon")`    |
-| Run clippy        | Use `execute("clippy-native-addon")`   |
-| Run fmt           | Use `execute("fmt-native-addon")`      |
-| Build TS only     | `bun run build:ts` in `packages/webview` |
+| Build addon       | `pnpm run build:native` from repo root    |
+| Run clippy        | `pnpm run lint:native` from repo root   |
+| Run fmt           | `pnpm run format:native` from repo root      |
+| Build TS only     | `pnpm run build:ts` in `packages/webview` |
 
-**Important:** Do NOT run `bun run build` or `cargo install`/`cargo add`. Update only `Cargo.toml` when adding Rust dependencies.
+Run `pnpm run test:native` after building to verify Node can load the addon. No MCP server is required. Do NOT run `cargo install` or `cargo add`. Update `Cargo.toml` directly when changing Rust dependencies.

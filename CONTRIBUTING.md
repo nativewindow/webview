@@ -54,7 +54,16 @@ pnpm --filter @nativewindow/webview run build:debug
 
 Both commands compile the addon and build its TypeScript wrapper. `pnpm run build:ts` only builds TypeScript.
 
-Agents must follow `AGENTS.md`: native builds, Clippy, and Rust formatting go through the configured [exocommand](https://github.com/fcannizzaro/exocommand) tools, not direct shell commands. `.exocommand` defines `build-native-addon`, `clippy-native-addon`, and `fmt-native-addon`.
+Run the native checks from the repository root without an MCP server:
+
+```bash
+pnpm run format:native
+pnpm run lint:native
+pnpm run build:native
+pnpm run test:native
+```
+
+Clippy checks all addon targets with the locked dependencies and treats Rust warnings as errors. The native smoke check imports the compiled wrapper and addon in Node without opening a window; CI runs it after the native build.
 
 The native targets are macOS ARM64/x64, Windows ARM64/x64, and Linux ARM64/x64. Linux builds require GTK 3 and WebKitGTK 4.1 development libraries. CI and publishing install those libraries where needed.
 

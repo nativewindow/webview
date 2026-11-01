@@ -9,7 +9,11 @@
     "lint": "vp lint packages samples docs vite.config.ts",
     "test": "vp test",
     "typecheck": "vp run -r typecheck",
-    "dev": "vp run --filter \"./samples/*\" dev"
+    "dev": "vp run --filter \"./samples/*\" dev",
+    "build:native": "pnpm --filter @nativewindow/webview run build",
+    "lint:native": "pnpm --filter @nativewindow/webview run lint:native",
+    "format:native": "pnpm --filter @nativewindow/webview run format:native",
+    "test:native": "node --input-type=module -e \"import('./packages/webview/dist/index.js')\""
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
